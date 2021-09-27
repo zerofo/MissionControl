@@ -6,9 +6,15 @@ GIT_HASH := $(shell git rev-parse --short HEAD)
 GIT_TAG := $(shell git describe --tags `git rev-list --tags --max-count=1`)
 BUILD_VERSION := $(GIT_TAG:v%=%)-$(GIT_BRANCH)-$(GIT_HASH)
 
-TARGETS := mcmitm_version.cpp mc_mitm
+TARGETS := libnx atm-lib mcmitm_version.cpp mc_mitm 
 
 all: $(TARGETS)
+
+libnx:
+	$(MAKE) -C lib/libnx 
+	$(MAKE) -C lib/libnx install
+atm-lib:
+	$(MAKE) -C lib/Atmosphere-libs
 
 mcmitm_version.cpp: .git/HEAD .git/index
 	echo "namespace ams::mitm { const char *version_string = \"$(BUILD_VERSION)\"; }" > mc_mitm/source/$@

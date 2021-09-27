@@ -21,7 +21,7 @@ namespace ams::mitm {
 
     namespace {
 
-        constexpr const char *config_file_location = "sdmc:/config/MissionControl/missioncontrol.ini";
+        constexpr const char *config_file_location = "sdmc:/switch/config/MissionControl/missioncontrol.ini";
 
         MissionControlConfig g_global_config = {
             .general = {
@@ -97,7 +97,9 @@ namespace ams::mitm {
         fs::FileHandle file;
         {
             if (R_FAILED(fs::OpenFile(std::addressof(file), config_file_location, fs::OpenMode_Read))) {
-                return;
+                if (R_FAILED(fs::OpenFile(std::addressof(file), "sdmc:/config/MissionControl/missioncontrol.ini", fs::OpenMode_Read))) {
+                    return;
+                }
             }
         }
         ON_SCOPE_EXIT { fs::CloseFile(file); };
