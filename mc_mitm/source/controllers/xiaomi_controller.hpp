@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -91,12 +91,14 @@ namespace ams::controller {
             XiaomiController(const bluetooth::Address *address, HardwareID id) 
             : EmulatedSwitchController(address, id) { }
 
-            Result Initialize(void);
+            bool SupportsSetTsiCommand() { return false; }
 
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            Result Initialize();
+
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x04(const XiaomiReportData *src);
+            void MapInputReport0x04(const XiaomiReportData *src);
 
     };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -16,8 +16,6 @@
 #include "bluetooth_core.hpp"
 #include "../btdrv_mitm_flags.hpp"
 #include "../../controllers/controller_management.hpp"
-#include <mutex>
-#include <cstring>
 
 namespace ams::bluetooth::core {
 
@@ -36,7 +34,9 @@ namespace ams::bluetooth::core {
         os::Event g_data_read_event(os::EventClearMode_AutoClear);
 
         bluetooth::Address ReverseBluetoothAddress(bluetooth::Address address) {
-            uint64_t tmp = util::SwapBytes48(*reinterpret_cast<uint64_t *>(&address)); 
+            uint64_t tmp;
+            std::memcpy(&tmp, &address, sizeof(address));
+            tmp = util::SwapEndian(tmp) >> 16;
             return *reinterpret_cast<bluetooth::Address *>(&tmp);
         }
 
@@ -46,31 +46,31 @@ namespace ams::bluetooth::core {
         return g_init_event.TryWait();
     }
 
-    void SignalInitialized(void) {
+    void SignalInitialized() {
         g_init_event.Signal();
     }
 
-    void WaitInitialized(void) {
+    void WaitInitialized() {
         g_init_event.Wait();
     }
 
-    void SignalEnabled(void) {
+    void SignalEnabled() {
         g_enable_event.Signal();
     }
 
-    void WaitEnabled(void) {
+    void WaitEnabled() {
         g_enable_event.Wait();
     }
 
-    os::SystemEvent *GetSystemEvent(void) {
+    os::SystemEvent *GetSystemEvent() {
         return &g_system_event;
     }
 
-    os::SystemEvent *GetForwardEvent(void) {
+    os::SystemEvent *GetForwardEvent() {
         return &g_system_event_fwd;
     }
 
-    os::SystemEvent *GetUserForwardEvent(void) {
+    os::SystemEvent *GetUserForwardEvent() {
         return &g_system_event_user_fwd;
     }
 
@@ -151,7 +151,7 @@ namespace ams::bluetooth::core {
         uint8_t pin_length = std::strlen(pin.code);
 
         // Reverse host address as pin code for wii devices
-        if (std::strncmp(g_event_info.pairing_pin_code_request.name, controller::wii_controller_prefix, std::strlen(controller::wii_controller_prefix)) == 0) {
+        if (std::strncmp(event_info->pairing_pin_code_request.name, controller::wii_controller_prefix, std::strlen(controller::wii_controller_prefix)) == 0) {
             // Fetch host adapter address
             bluetooth::Address host_address;
             R_ABORT_UNLESS(btdrvLegacyGetAdapterProperty(BtdrvBluetoothPropertyType_Address, &host_address, sizeof(bluetooth::Address)));
@@ -161,7 +161,7 @@ namespace ams::bluetooth::core {
             pin_length = sizeof(bluetooth::Address);
         }
 
-        R_ABORT_UNLESS(btdrvLegacyRespondToPinRequest(g_event_info.pairing_pin_code_request.addr, false, &pin, pin_length));
+        R_ABORT_UNLESS(btdrvLegacyRespondToPinRequest(event_info->pairing_pin_code_request.addr, false, &pin, pin_length));
     }
 
     inline void HandlePinCodeRequestEventV12(bluetooth::EventInfo *event_info) {
@@ -169,7 +169,7 @@ namespace ams::bluetooth::core {
         BtdrvPinCode pin = {"0000", 4};
 
         // Reverse host address as pin code for wii devices
-        if (std::strncmp(g_event_info.pairing_pin_code_request.name, controller::wii_controller_prefix, std::strlen(controller::wii_controller_prefix)) == 0) {
+        if (std::strncmp(event_info->pairing_pin_code_request.name, controller::wii_controller_prefix, std::strlen(controller::wii_controller_prefix)) == 0) {
             // Fetch host adapter address
             BtdrvAdapterProperty property;
             R_ABORT_UNLESS(btdrvGetAdapterProperty(BtdrvAdapterPropertyType_Address, &property));
@@ -181,10 +181,10 @@ namespace ams::bluetooth::core {
             pin.length = sizeof(bluetooth::Address);
         }
 
-        R_ABORT_UNLESS(btdrvRespondToPinRequest(g_event_info.pairing_pin_code_request.addr, &pin));
+        R_ABORT_UNLESS(btdrvRespondToPinRequest(event_info->pairing_pin_code_request.addr, &pin));
     }
 
-    void HandleEvent(void) {
+    void HandleEvent() {
         {
             std::scoped_lock lk(g_event_info_lock);
             R_ABORT_UNLESS(btdrvGetEventInfo(&g_event_info, sizeof(bluetooth::EventInfo), &g_current_event_type));

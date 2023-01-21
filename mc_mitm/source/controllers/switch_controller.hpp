@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,8 +17,12 @@
 #include "switch_analog_stick.hpp"
 #include "../bluetooth_mitm/bluetooth/bluetooth_types.hpp"
 #include "../bluetooth_mitm/bluetooth/bluetooth_hid_report.hpp"
+#include "../async/future_response.hpp"
+#include <queue>
 
 namespace ams::controller {
+
+    using HidResponse = FutureResponse<bluetooth::HidEventType, bluetooth::HidReportEventInfo, uint8_t>;
 
     constexpr auto BATTERY_MAX = 8;
 
@@ -51,7 +55,7 @@ namespace ams::controller {
         RGBColour left_grip;
         RGBColour right_grip;
     } __attribute__ ((__packed__));
-        
+
     struct SwitchButtonData {
         uint8_t Y              : 1;
         uint8_t X              : 1;
@@ -79,12 +83,49 @@ namespace ams::controller {
     } __attribute__ ((__packed__));
 
     struct Switch6AxisData {
-        uint16_t accel_x;
-        uint16_t accel_y;
-        uint16_t accel_z;
-        uint16_t gyro_1;
-        uint16_t gyro_2;
-        uint16_t gyro_3;
+        int16_t accel_x;
+        int16_t accel_y;
+        int16_t accel_z;
+        int16_t gyro_1;
+        int16_t gyro_2;
+        int16_t gyro_3;
+    } __attribute__ ((__packed__));
+
+    struct Switch6AxisCalibrationData {
+        struct {
+            int16_t x;
+            int16_t y;
+            int16_t z;
+        } acc_bias;
+
+        struct {
+            int16_t x;
+            int16_t y;
+            int16_t z;
+        } acc_sensitivity;
+
+        struct {
+            int16_t roll;
+            int16_t pitch;
+            int16_t yaw;
+        } gyro_bias;
+
+        struct {
+            int16_t roll;
+            int16_t pitch;
+            int16_t yaw;
+        } gyro_sensitivity;
+    } __attribute__((packed));
+
+    struct Switch6AxisHorizontalOffset {
+        int16_t x;
+        int16_t y;
+        int16_t z;
+    } __attribute__((packed));
+
+    struct SwitchRumbleDataEncoded {
+        uint8_t left_motor[4];
+        uint8_t right_motor[4];
     } __attribute__ ((__packed__));
 
     struct SwitchRumbleData {
@@ -94,62 +135,96 @@ namespace ams::controller {
         float low_band_amp;
     } __attribute__ ((__packed__));
 
-    enum SubCmdType : uint8_t {
-        SubCmd_GetControllerState   = 0x00,
-        SubCmd_ManualPair           = 0x01,
-        SubCmd_RequestDeviceInfo    = 0x02,
-        SubCmd_SetInputReportMode   = 0x03,
-        SubCmd_TriggersElapsedTime  = 0x04,
-        SubCmd_GetPageListState     = 0x05,
-        SubCmd_SetHciState          = 0x06,
-        SubCmd_ResetPairingInfo     = 0x07,
-        SubCmd_SetShipPowerState    = 0x08,
-        SubCmd_SpiFlashRead         = 0x10,
-        SubCmd_SpiFlashWrite        = 0x11,
-        SubCmd_SpiSectorErase       = 0x12,
-        SubCmd_ResetMcu             = 0x20,
-        SubCmd_SetMcuConfig         = 0x21,
-        SubCmd_SetMcuState          = 0x22,
-        SubCmd_SetPlayerLeds        = 0x30,
-        SubCmd_GetPlayerLeds        = 0x31,
-        SubCmd_SetHomeLed           = 0x38,
-        SubCmd_EnableImu            = 0x40,
-        SubCmd_SetImuSensitivity    = 0x41,
-        SubCmd_WriteImuRegisters    = 0x42,
-        SubCmd_ReadImuRegisters     = 0x43,
-        SubCmd_EnableVibration      = 0x48,
-        SubCmd_GetRegulatedVoltage  = 0x50,
-        SubCmd_SetGpioPinValue      = 0x51,
-        SubCmd_GetGpioPinValue      = 0x52,
+    enum HidCommandType : uint8_t {
+        HidCommand_PairingOut             = 0x01,
+        HidCommand_GetDeviceInfo          = 0x02,
+        HidCommand_SetDataFormat          = 0x03,
+        HidCommand_LRButtonDetection      = 0x04,
+        HidCommand_Page                   = 0x05,
+        HidCommand_Reset                  = 0x06,
+        HidCommand_ClearPairingInfo       = 0x07,
+        HidCommand_Shipment               = 0x08,
+        HidCommand_SerialFlashRead        = 0x10,
+        HidCommand_SerialFlashWrite       = 0x11,
+        HidCommand_SerialFlashSectorErase = 0x12,
+        HidCommand_McuReset               = 0x20,
+        HidCommand_McuWrite               = 0x21,
+        HidCommand_McuResume              = 0x22,
+        HidCommand_McuPollingEnable       = 0x24,
+        HidCommand_McuPollingDisable      = 0x25,
+        HidCommand_AttachmentWrite        = 0x28,
+        HidCommand_AttachmentRead         = 0x29,
+        HidCommand_AttachmentEnable       = 0x2a,
+        HidCommand_SetIndicatorLed        = 0x30,
+        HidCommand_GetIndicatorLed        = 0x31,
+        HidCommand_SetNotificationLed     = 0x38,
+        HidCommand_SensorSleep            = 0x40,
+        HidCommand_SensorConfig           = 0x41,
+        HidCommand_SensorWrite            = 0x42,
+        HidCommand_SensorRead             = 0x43,
+        HidCommand_MotorEnable            = 0x48,
+        HidCommand_GetBatteryVoltage      = 0x50,
+        HidCommand_WriteChargeSetting     = 0x51,
+        HidCommand_ReadChargeSetting      = 0x52,
     };
 
-    struct SwitchSubcommand {
+    struct SwitchHidCommand {
         uint8_t id;
         union {
             uint8_t data[0x26];
 
             struct {
+                uint8_t id;
+            } set_data_format;
+
+            struct {
                 uint32_t address;
                 uint8_t size;
-            } spi_flash_read;
+            } serial_flash_read;
 
             struct {
                 uint32_t address;
                 uint8_t size;
                 uint8_t data[];
-            } spi_flash_write;
+            } serial_flash_write;
 
             struct {
                 uint32_t address;
-            } spi_flash_sector_erase;
+            } serial_flash_sector_erase;
+
+            struct {
+                union {
+                    uint8_t leds;
+
+                    struct {
+                        uint8_t leds_flash : 4;
+                        uint8_t leds_on    : 4;
+                    };
+                };
+            } set_indicator_led;
+
+            struct {
+                bool disabled;
+            } sensor_sleep;
+
+            struct {
+                uint8_t gyro_sensitivity;
+                uint8_t acc_sensitivity;
+                uint8_t gyro_perf_rate;
+                uint8_t acc_aa_bandwidth;
+            } sensor_config;
+
+            struct {
+                bool enabled;
+            } motor_enable;
         };
     } __attribute__ ((__packed__));
 
-    struct SwitchSubcommandResponse {
+    struct SwitchHidCommandResponse {
         uint8_t ack;
         uint8_t id;
         union {
-            uint8_t data[0x23];
+            uint8_t raw[0x23];
 
             struct {
                 struct {
@@ -161,133 +236,150 @@ namespace ams::controller {
                 bluetooth::Address address;
                 uint8_t _unk1;  // Always 0x01
                 uint8_t _unk2;  // If 01, colors in SPI are used. Otherwise default ones
-            } __attribute__ ((__packed__)) device_info;
+            } __attribute__ ((__packed__)) get_device_info;
 
             struct {
                 bool enabled;
-            } set_ship_power_state;
+            } shipment;
 
             struct {
                 uint32_t address;
                 uint8_t size;
                 uint8_t data[];
-            } spi_flash_read;
+            } serial_flash_read;
 
             struct {
                 uint8_t status;
-            } spi_flash_write;
+            } serial_flash_write;
 
             struct {
                 uint8_t status;
-            } spi_sector_erase;
+            } serial_flash_sector_erase;
+
+            struct {
+                union {
+                    uint8_t leds;
+
+                    struct {
+                        uint8_t leds_flash : 4;
+                        uint8_t leds_on    : 4;
+                    };
+                };
+            } get_indicator_led;
+        } data;
+    } __attribute__ ((__packed__));
+
+    struct SwitchNfcIrResponse {
+        uint8_t data[0x138];
+    } __attribute__ ((__packed__));
+
+    struct SwitchInputReport {
+        uint8_t id;
+        uint8_t timer;
+        uint8_t conn_info : 4;
+        uint8_t battery   : 4;
+        SwitchButtonData buttons;
+        SwitchAnalogStick left_stick;
+        SwitchAnalogStick right_stick;
+        uint8_t vibrator;
+
+        union {
+            struct {
+                SwitchHidCommandResponse hid_command_response;
+            } type0x21;
+
+            struct {
+                uint8_t mcu_fw_data[37];
+            } type0x23;
+
+            struct {
+                Switch6AxisData motion_data[3]; // IMU samples at 0, 5 and 10ms
+            } type0x30;
+
+            struct {
+                Switch6AxisData motion_data[3]; // IMU samples at 0, 5 and 10ms
+                SwitchNfcIrResponse nfc_ir_response;
+                uint8_t crc;
+            } type0x31;
         };
     } __attribute__ ((__packed__));
 
-    struct SwitchOutputReport0x01 {
-        uint8_t counter;
-        struct {
-            uint8_t left_motor[4];
-            uint8_t right_motor[4];
-        } rumble;
-        SwitchSubcommand subcmd;
-    } __attribute__ ((__packed__));
-
-    struct SwitchOutputReport0x03;
-
-    struct SwitchOutputReport0x10 {
-        uint8_t timer;
-        struct {
-            uint8_t left_motor[4];
-            uint8_t right_motor[4];
-        } rumble;
-    }__attribute__ ((__packed__));
-
-    struct SwitchOutputReport0x11;
-    struct SwitchOutputReport0x12;
-
-    struct SwitchInputReport0x21 {
-        uint8_t           timer;
-        uint8_t           conn_info      : 4;
-        uint8_t           battery        : 4;
-        SwitchButtonData  buttons;
-        SwitchAnalogStick left_stick;
-        SwitchAnalogStick right_stick;
-        uint8_t           vibrator;
-        SwitchSubcommandResponse response;
-    } __attribute__ ((__packed__));
-
-    struct SwitchInputReport0x23;
-
-    struct SwitchInputReport0x30 {
-        uint8_t           timer;
-        uint8_t           conn_info      : 4;
-        uint8_t           battery        : 4;
-        SwitchButtonData  buttons;
-        SwitchAnalogStick left_stick;
-        SwitchAnalogStick right_stick;
-        uint8_t           vibrator;
-
-        // IMU samples at 0, 5 and 10ms
-        Switch6AxisData     motion[3];
-    } __attribute__ ((__packed__));
-
-    struct SwitchInputReport0x31;
-    struct SwitchInputReport0x32;
-    struct SwitchInputReport0x33;
-    struct SwitchInputReport0x3f;
-
-    struct SwitchReportData {
+    struct SwitchOutputReport {
         uint8_t id;
+        uint8_t counter;
+        SwitchRumbleDataEncoded rumble_data;
+
         union {
-            SwitchOutputReport0x01 output0x01;
-            //SwitchOutputReport0x03 output0x03;
-            SwitchOutputReport0x10 output0x10;
-            //SwitchOutputReport0x11 output0x11;
-            //SwitchOutputReport0x12 output0x12;
-            SwitchInputReport0x21  input0x21;
-            SwitchInputReport0x30  input0x30;
-            //SwitchInputReport0x31  input0x31;
-            //SwitchInputReport0x32  input0x32;
-            //SwitchInputReport0x33  input0x33;
-            //SwitchInputReport0x3f  input0x3f;
+            struct{
+                SwitchHidCommand hid_command;
+            } type0x01;
+
+            struct {
+                uint8_t nfc_ir_data[0x16];
+            } type0x11;
         };
     } __attribute__ ((__packed__));
 
     Result LedsMaskToPlayerNumber(uint8_t led_mask, uint8_t *player_number);
 
+    std::string GetControllerDirectory(const bluetooth::Address *address);
+
     class SwitchController {
 
-        public: 
-            static constexpr const HardwareID hardware_ids[] = { 
+        public:
+            static constexpr const HardwareID hardware_ids[] = {
                 {0x057e, 0x2006},   // Official Joycon(L) Controller
                 {0x057e, 0x2007},   // Official Joycon(R) Controller/NES Online Controller
                 {0x057e, 0x2009},   // Official Switch Pro Controller
-                {0x057e, 0x2017}    // Official SNES Online Controller
+                {0x057e, 0x2017},   // Official SNES Online Controller
+                {0x057e, 0x2019},   // Official N64 Online Controller
+                {0x057e, 0x201a}    // Official Genesis/Megadrive Online Controller
             };
 
             SwitchController(const bluetooth::Address *address, HardwareID id)
             : m_address(*address)
-            , m_id(id) { }
+            , m_id(id)
+            , m_settsi_supported(true)
+            , m_input_mutex(false)
+            , m_output_mutex(false) { }
 
             virtual ~SwitchController() { };
 
-            const bluetooth::Address& Address(void) const { return m_address; }
+            const bluetooth::Address& Address() const { return m_address; }
 
-            virtual bool IsOfficialController(void) { return true; }
-            virtual bool SupportsSetTsiCommand(void) { return true; }
+            virtual bool IsOfficialController() { return true; }
+            virtual bool SupportsSetTsiCommand() { return m_settsi_supported; }
 
-            virtual Result Initialize(void) { return ams::ResultSuccess(); }
-            virtual Result HandleIncomingReport(const bluetooth::HidReport *report);
-            virtual Result HandleOutgoingReport(const bluetooth::HidReport *report);
+            virtual Result Initialize();
+
+            virtual Result HandleDataReportEvent(const bluetooth::HidReportEventInfo *event_info);
+            virtual Result HandleSetReportEvent(const bluetooth::HidReportEventInfo *event_info);
+            virtual Result HandleGetReportEvent(const bluetooth::HidReportEventInfo *event_info);
+            virtual Result HandleOutputDataReport(const bluetooth::HidReport *report);
+        private:
+            bool HasSetTsiDisableFlag();
 
         protected:
+            Result WriteDataReport(const bluetooth::HidReport *report);
+            Result WriteDataReport(const bluetooth::HidReport *report, uint8_t response_id, bluetooth::HidReport *out_report);
+            Result SetFeatureReport(const bluetooth::HidReport *report);
+            Result GetFeatureReport(uint8_t id, bluetooth::HidReport *out_report);
+
+            virtual void UpdateControllerState(const bluetooth::HidReport *report);
             virtual void ApplyButtonCombos(SwitchButtonData *buttons);
 
             bluetooth::Address m_address;
             HardwareID m_id;
 
-            static bluetooth::HidReport s_input_report;
-            static bluetooth::HidReport s_output_report;
+            bool m_settsi_supported;
+
+            os::Mutex m_input_mutex;
+            bluetooth::HidReport m_input_report;
+
+            os::Mutex m_output_mutex;
+            bluetooth::HidReport m_output_report;
+
+            std::queue<std::shared_ptr<HidResponse>> m_future_responses;
     };
 
 }

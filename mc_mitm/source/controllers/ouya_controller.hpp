@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -74,11 +74,13 @@ namespace ams::controller {
             OuyaController(const bluetooth::Address *address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
 
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            bool SupportsSetTsiCommand() { return false; }
+
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x03(const OuyaReportData *src);
-            void HandleInputReport0x07(const OuyaReportData *src);
+            void MapInputReport0x03(const OuyaReportData *src);
+            void MapInputReport0x07(const OuyaReportData *src);
 
     };
 

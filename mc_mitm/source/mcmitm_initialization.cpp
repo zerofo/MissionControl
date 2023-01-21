@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,28 +17,37 @@
 #include <switch.h>
 #include "mcmitm_initialization.hpp"
 #include "mcmitm_config.hpp"
+#include "async/async.hpp"
 #include "bluetooth_mitm/btdrv_mitm_service.hpp"
 #include "bluetooth_mitm/bluetoothmitm_module.hpp"
 #include "btm_mitm/btmmitm_module.hpp"
+#include "mc/mc_module.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_events.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_core.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_hid.hpp"
+#include "bluetooth_mitm/bluetooth/bluetooth_hid_report.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_ble.hpp"
- 
+
 namespace ams::mitm {
 
     namespace {
 
-        constexpr size_t InitializeThreadStackSize = 0x1000;
-
-        os::ThreadType g_initialize_thread;
-        alignas(os::ThreadStackAlignment) u8 g_initialize_thread_stack[InitializeThreadStackSize];
+        const s32 ThreadPriority = -7;
+        const size_t ThreadStackSize = 0x1000;
+        alignas(os::ThreadStackAlignment) u8 g_thread_stack[ThreadStackSize];
+        os::ThreadType g_thread;
 
         os::Event g_init_event(os::EventClearMode_ManualClear);
 
-        void InitializeThreadFunc(void *arg) {
+        void InitializeThreadFunc(void *) {
+            // Start async worker thread(s)
+            ams::async::Initialize();
+
             // Start bluetooth event handling thread
             ams::bluetooth::events::Initialize();
+
+            // Start hid report handling thread
+            ams::bluetooth::hid::report::Initialize();
 
             // Wait for system to call BluetoothEnable
             ams::bluetooth::core::WaitEnabled();
@@ -83,28 +92,31 @@ namespace ams::mitm {
 
     }
 
-    void StartInitialize(void) {
-        R_ABORT_UNLESS(os::CreateThread(&g_initialize_thread, 
-            InitializeThreadFunc, 
-            nullptr, 
-            g_initialize_thread_stack, 
-            sizeof(g_initialize_thread_stack), 
-            -7
+    void StartInitialize() {
+        R_ABORT_UNLESS(os::CreateThread(&g_thread,
+            InitializeThreadFunc,
+            nullptr,
+            g_thread_stack,
+            ThreadStackSize,
+            ThreadPriority
         ));
 
-        os::StartThread(&g_initialize_thread);  
+        os::SetThreadNamePointer(&g_thread, "mc::InitThread");
+        os::StartThread(&g_thread);
     }
 
-    void WaitInitialized(void) {
+    void WaitInitialized() {
         g_init_event.Wait();
     }
 
-    void LaunchModules(void) {
+    void LaunchModules() {
         R_ABORT_UNLESS(ams::mitm::bluetooth::Launch());
         R_ABORT_UNLESS(ams::mitm::btm::Launch());
+        R_ABORT_UNLESS(ams::mitm::mc::Launch());
     }
 
-    void WaitModules(void) {
+    void WaitModules() {
+        ams::mitm::mc::WaitFinished();
         ams::mitm::btm::WaitFinished();
         ams::mitm::bluetooth::WaitFinished();
     }

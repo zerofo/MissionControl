@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -146,15 +146,15 @@ namespace ams::controller {
             XboxOneController(const bluetooth::Address *address, HardwareID id) 
             : EmulatedSwitchController(address, id) { }
 
-            bool SupportsSetTsiCommand(void) { return false; }
+            bool SupportsSetTsiCommand() { return false; }
 
             Result SetVibration(const SwitchRumbleData *rumble_data);
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x01(const XboxOneReportData *src, bool new_format);
-            void HandleInputReport0x02(const XboxOneReportData *src);
-            void HandleInputReport0x04(const XboxOneReportData *src);
+            void MapInputReport0x01(const XboxOneReportData *src, bool new_format);
+            void MapInputReport0x02(const XboxOneReportData *src);
+            void MapInputReport0x04(const XboxOneReportData *src);
 
     };
 

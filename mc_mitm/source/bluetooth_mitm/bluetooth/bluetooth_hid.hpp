@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,16 +20,16 @@
 
 namespace ams::bluetooth::hid {
 
-    bool IsInitialized(void);
-    void SignalInitialized(void);
-    void WaitInitialized(void);
+    bool IsInitialized();
+    void SignalInitialized();
+    void WaitInitialized();
 
-    os::SystemEvent *GetSystemEvent(void);
-    os::SystemEvent *GetForwardEvent(void);
-    os::SystemEvent *GetUserForwardEvent(void);
+    os::SystemEvent *GetSystemEvent();
+    os::SystemEvent *GetForwardEvent();
+    os::SystemEvent *GetUserForwardEvent();
 
     void SignalFakeEvent(bluetooth::HidEventType type, const void *data, size_t size);
     Result GetEventInfo(bluetooth::HidEventType *type, void *buffer, size_t size);
-    void HandleEvent(void);
+    void HandleEvent();
 
 }

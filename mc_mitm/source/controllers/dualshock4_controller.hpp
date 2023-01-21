@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -87,37 +87,80 @@ namespace ams::controller {
         uint8_t amp_motor_right;
     } __attribute__((packed));
 
+    struct Dualshock4ImuCalibrationData {
+        struct {
+            int16_t pitch_bias;
+            int16_t yaw_bias;
+            int16_t roll_bias;
+            int16_t pitch_max;
+            int16_t yaw_max;
+            int16_t roll_max;
+            int16_t pitch_min;
+            int16_t yaw_min;
+            int16_t roll_min;
+            int16_t speed_max;
+            int16_t speed_min;
+        } gyro;
+        
+        struct {
+            int16_t x_max;
+            int16_t x_min;
+            int16_t y_max;
+            int16_t y_min;
+            int16_t z_max;
+            int16_t z_min;
+        } acc;
+    } __attribute__((packed));
+
+    struct Dualshock4VersionInfo {
+        char date[48];
+    } __attribute__((packed));
+
+    struct Dualshock4FeatureReport0x05 {
+        Dualshock4ImuCalibrationData calibration;
+        uint32_t crc;
+    } __attribute__((packed));
+
+    struct Dualshock4FeatureReport0x06 {
+        Dualshock4VersionInfo version_info;
+        uint32_t crc;
+    } __attribute__((packed));
+
+    struct Dualshock4FeatureReport0xa3 {
+        Dualshock4VersionInfo version_info;
+    } __attribute__((packed));
+
     struct Dualshock4OutputReport0x11 {
         struct {
-            uint8_t data[75];
+            uint8_t data[73];
         };
         uint32_t crc;
     } __attribute__((packed));
 
     struct Dualshock4InputReport0x01 {
-        Dualshock4StickData     left_stick;
-        Dualshock4StickData     right_stick;
-        Dualshock4ButtonData    buttons;
-        uint8_t                 left_trigger;
-        uint8_t                 right_trigger;
+        Dualshock4StickData left_stick;
+        Dualshock4StickData right_stick;
+        Dualshock4ButtonData buttons;
+        uint8_t left_trigger;
+        uint8_t right_trigger;
     } __attribute__((packed));
 
     struct Dualshock4InputReport0x11 {
-        uint8_t                 _unk0[2];
-        Dualshock4StickData     left_stick;
-        Dualshock4StickData     right_stick;
-        Dualshock4ButtonData    buttons;
-        uint8_t                 left_trigger;
-        uint8_t                 right_trigger;
-        uint16_t                timestamp;
-        uint8_t                 battery;
-        uint16_t                vel_x;
-        uint16_t                vel_y;
-        uint16_t                vel_z;
-        uint16_t                acc_x;
-        uint16_t                acc_y;
-        uint16_t                acc_z;
-        uint8_t                 _unk1[5];
+        uint8_t _unk0[2];
+        Dualshock4StickData left_stick;
+        Dualshock4StickData right_stick;
+        Dualshock4ButtonData buttons;
+        uint8_t left_trigger;
+        uint8_t right_trigger;
+        uint16_t timestamp;
+        uint8_t battery;
+        int16_t vel_x;
+        int16_t vel_y;
+        int16_t vel_z;
+        int16_t acc_x;
+        int16_t acc_y;
+        int16_t acc_z;
+        uint8_t _unk1[5];
 
         uint8_t battery_level    : 4;
         uint8_t usb              : 1;
@@ -126,16 +169,19 @@ namespace ams::controller {
         uint8_t                  : 0;
 
         uint16_t _unk2;
-        uint8_t  tpad_packets;
-        uint8_t  packet_counter;
+        uint8_t tpad_packets;
+        uint8_t packet_counter;
     } __attribute__((packed));
 
     struct Dualshock4ReportData {
         uint8_t id;
         union {
-            Dualshock4OutputReport0x11 output0x11;
-            Dualshock4InputReport0x01  input0x01;
-            Dualshock4InputReport0x11  input0x11;
+            Dualshock4FeatureReport0x05 feature0x05;
+            Dualshock4FeatureReport0x06 feature0x06;
+            Dualshock4FeatureReport0xa3 feature0xa3;
+            Dualshock4OutputReport0x11  output0x11;
+            Dualshock4InputReport0x01   input0x01;
+            Dualshock4InputReport0x11   input0x11;
         };
     } __attribute__((packed));
 
@@ -155,25 +201,29 @@ namespace ams::controller {
             , m_led_colour({0, 0, 0})
             , m_rumble_state({0, 0}) { }
 
-            Result Initialize(void);
+            Result Initialize();
             Result SetVibration(const SwitchRumbleData *rumble_data);
-            Result CancelVibration(void);
+            Result CancelVibration();
             Result SetPlayerLed(uint8_t led_mask);
             Result SetLightbarColour(RGBColour colour);
 
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x01(const Dualshock4ReportData *src);
-            void HandleInputReport0x11(const Dualshock4ReportData *src);
+            void MapInputReport0x01(const Dualshock4ReportData *src);
+            void MapInputReport0x11(const Dualshock4ReportData *src);
 
             void MapButtons(const Dualshock4ButtonData *buttons);
             
-            Result PushRumbleLedState(void);
+            Result GetVersionInfo(Dualshock4VersionInfo *version_info);
+            Result GetCalibrationData(Dualshock4ImuCalibrationData *calibration);
+            Result PushRumbleLedState();
 
             Dualshock4ReportRate m_report_rate;
             RGBColour m_led_colour; 
             Dualshock4RumbleData m_rumble_state;
+
+            Dualshock4ImuCalibrationData m_motion_calibration;
     };
 
 }

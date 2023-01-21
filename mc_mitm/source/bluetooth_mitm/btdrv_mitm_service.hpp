@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,7 +19,7 @@
 
 #define AMS_BTDRV_MITM_INTERFACE_INFO(C, H)                                                                                                                                                                                             \
     AMS_SF_METHOD_INFO(C, H, 1,     Result, InitializeBluetooth,              (sf::OutCopyHandle out_handle),                                                           (out_handle))                                                   \
-    AMS_SF_METHOD_INFO(C, H, 2,     Result, EnableBluetooth,                  (void),                                                                                   ())                                                             \
+    AMS_SF_METHOD_INFO(C, H, 2,     Result, EnableBluetooth,                  (),                                                                                   ())                                                             \
     AMS_SF_METHOD_INFO(C, H, 15,    Result, GetEventInfo,                     (sf::Out<ams::bluetooth::EventType> out_type, const sf::OutPointerBuffer &out_buffer),    (out_type, out_buffer))                                         \
     AMS_SF_METHOD_INFO(C, H, 16,    Result, InitializeHid,                    (sf::OutCopyHandle out_handle, u16 version),                                              (out_handle, version))                                          \
     AMS_SF_METHOD_INFO(C, H, 19,    Result, WriteHidData,                     (ams::bluetooth::Address address, const sf::InPointerBuffer &buffer),                     (address, buffer))                                              \
@@ -39,9 +39,9 @@
     AMS_SF_METHOD_INFO(C, H, 65003, void,   RedirectHidEvents,                (bool redirect),                                                                          (redirect))                                                     \
     AMS_SF_METHOD_INFO(C, H, 65004, void,   RedirectHidReportEvents,          (bool redirect),                                                                          (redirect))                                                     \
     AMS_SF_METHOD_INFO(C, H, 65005, void,   RedirectBleEvents,                (bool redirect),                                                                          (redirect))                                                     \
-    AMS_SF_METHOD_INFO(C, H, 65006, void,   SignalHidReportRead,              (void),                                                                                   ())                                                             \
+    AMS_SF_METHOD_INFO(C, H, 65006, void,   SignalHidReportRead,              (),                                                                                   ())                                                             \
 
-AMS_SF_DEFINE_MITM_INTERFACE(ams::mitm::bluetooth, IBtdrvMitmInterface, AMS_BTDRV_MITM_INTERFACE_INFO)
+AMS_SF_DEFINE_MITM_INTERFACE(ams::mitm::bluetooth, IBtdrvMitmInterface, AMS_BTDRV_MITM_INTERFACE_INFO, 0xAACFC9A7)
 
 namespace ams::mitm::bluetooth {
 
@@ -52,12 +52,13 @@ namespace ams::mitm::bluetooth {
 
         public:
             static bool ShouldMitm(const sm::MitmProcessInfo &client_info) {
+                AMS_UNUSED(client_info);
                 return true;
             }
 
         public:
             Result InitializeBluetooth(sf::OutCopyHandle out_handle);
-            Result EnableBluetooth(void);
+            Result EnableBluetooth();
             Result GetEventInfo(sf::Out<ams::bluetooth::EventType> out_type, const sf::OutPointerBuffer &out_buffer);
             Result InitializeHid(sf::OutCopyHandle out_handle, u16 version);
             Result WriteHidData(ams::bluetooth::Address address, const sf::InPointerBuffer &buffer);
@@ -80,7 +81,7 @@ namespace ams::mitm::bluetooth {
             void RedirectHidEvents(bool redirect);
             void RedirectHidReportEvents(bool redirect);
             void RedirectBleEvents(bool redirect);
-            void SignalHidReportRead(void);
+            void SignalHidReportRead();
     };
     static_assert(IsIBtdrvMitmInterface<BtdrvMitmService>);
 

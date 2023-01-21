@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -15,7 +15,6 @@
  */
 #include "bluetoothmitm_module.hpp"
 #include "btdrv_mitm_service.hpp"
-#include "../utils.hpp"
 #include <stratosphere.hpp>
 
 namespace ams::mitm::bluetooth {
@@ -30,12 +29,14 @@ namespace ams::mitm::bluetooth {
         constexpr sm::ServiceName BtdrvMitmServiceName = sm::ServiceName::Encode("btdrv");
 
         struct ServerOptions {
-            static constexpr size_t PointerBufferSize = 0x1000;
-            static constexpr size_t MaxDomains = 0;
-            static constexpr size_t MaxDomainObjects = 0;
+            static constexpr size_t PointerBufferSize   = 0x1000;
+            static constexpr size_t MaxDomains          = 0;
+            static constexpr size_t MaxDomainObjects    = 0;
+            static constexpr bool CanDeferInvokeRequest = false;
+            static constexpr bool CanManageMitmServers  = true;
         };
 
-        constexpr size_t MaxSessions = 6;
+        constexpr size_t MaxSessions = 30;
 
         class ServerManager final : public sf::hipc::ServerManager<PortIndex_Count, ServerOptions, MaxSessions> {
             private:
@@ -57,33 +58,35 @@ namespace ams::mitm::bluetooth {
             }
         }
 
-        os::ThreadType g_btdrv_mitm_thread;
-        alignas(os::ThreadStackAlignment) u8 g_btdrv_mitm_thread_stack[0x2000];
-        s32 g_btdrv_mitm_thread_priority = utils::ConvertToUserPriority(17);
+        const s32 ThreadPriority = -11;
+        const size_t ThreadStackSize = 0x1000;
+        alignas(os::ThreadStackAlignment) u8 g_thread_stack[ThreadStackSize];
+        os::ThreadType g_thread;
 
-        void BtdrvMitmThreadFunction(void *arg) {
+        void BtdrvMitmThreadFunction(void *) {
             R_ABORT_UNLESS((g_server_manager.RegisterMitmServer<BtdrvMitmService>(PortIndex_BtdrvMitm, BtdrvMitmServiceName)));
             g_server_manager.LoopProcess();
         }
 
     }
 
-    Result Launch(void) {
-        R_TRY(os::CreateThread(&g_btdrv_mitm_thread,
+    Result Launch() {
+        R_TRY(os::CreateThread(&g_thread,
             BtdrvMitmThreadFunction,
             nullptr,
-            g_btdrv_mitm_thread_stack,
-            sizeof(g_btdrv_mitm_thread_stack),
-            g_btdrv_mitm_thread_priority
+            g_thread_stack,
+            ThreadStackSize,
+            ThreadPriority
         ));
 
-        os::StartThread(&g_btdrv_mitm_thread);
+        os::SetThreadNamePointer(&g_thread, "mc::BtdrvMitmThread");
+        os::StartThread(&g_thread);
 
         return ams::ResultSuccess();
     }
 
-    void WaitFinished(void) {
-        os::WaitThread(&g_btdrv_mitm_thread);
+    void WaitFinished() {
+        os::WaitThread(&g_thread);
     }
 
 }

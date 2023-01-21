@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <stratosphere.hpp>
-#include <cstring>
 #include "mcmitm_config.hpp"
 
 namespace ams::mitm {
@@ -23,13 +22,18 @@ namespace ams::mitm {
 
         constexpr const char *config_file_location = "sdmc:/config/MissionControl/missioncontrol.ini";
 
+        SetLanguage g_system_language;
+
         MissionControlConfig g_global_config = {
             .general = {
                 .enable_rumble = true,
                 .enable_motion = true
             },
             .misc = {
-                .disable_sony_leds = false
+                .enable_dualshock4_lightbar = true,
+                .enable_dualsense_lightbar = true,
+                .enable_dualsense_player_leds = true,
+                .dualsense_vibration_intensity = 4
             }
         };
 
@@ -38,6 +42,12 @@ namespace ams::mitm {
                 *out = true;
             else if (strcasecmp(value, "false") == 0)
                 *out = false; 
+        }
+
+        void ParseInt(const char *value, int *out, int min=INT_MIN, int max=INT_MAX) {
+            int tmp = std::strtol(value, nullptr, 10);
+            if ((tmp >= min) && (tmp <= max))
+                *out = tmp;
         }
 
         void ParseBluetoothAddress(const char *value, bluetooth::Address *out) {
@@ -76,8 +86,14 @@ namespace ams::mitm {
                     ParseBluetoothAddress(value, &config->bluetooth.host_address);
             }
             else if (strcasecmp(section, "misc") == 0) {
-                if (strcasecmp(name, "disable_sony_leds") == 0)
-                    ParseBoolean(value, &config->misc.disable_sony_leds);
+                if (strcasecmp(name, "enable_dualshock4_lightbar") == 0)
+                    ParseBoolean(value, &config->misc.enable_dualshock4_lightbar);
+                else if (strcasecmp(name, "enable_dualsense_lightbar") == 0)
+                    ParseBoolean(value, &config->misc.enable_dualsense_lightbar);
+                else if (strcasecmp(name, "enable_dualsense_player_leds") == 0)
+                    ParseBoolean(value, &config->misc.enable_dualsense_player_leds);
+                else if (strcasecmp(name, "dualsense_vibration_intensity") == 0)
+                    ParseInt(value, &config->misc.dualsense_vibration_intensity, 1, 8);
             }
             else {
                 return 0;
@@ -88,11 +104,7 @@ namespace ams::mitm {
 
     }
 
-    MissionControlConfig *GetGlobalConfig(void) {
-        return &g_global_config;
-    }
-
-    void ParseIniConfig(void) {
+    void ParseIniConfig() {
         /* Open the file. */
         fs::FileHandle file;
         {
@@ -104,6 +116,24 @@ namespace ams::mitm {
 
         /* Parse the config. */
         util::ini::ParseFile(file, &g_global_config, ConfigIniHandler);
+    }
+
+    void InitializeConfig() {
+        ParseIniConfig();
+
+        R_ABORT_UNLESS(setInitialize());
+        ON_SCOPE_EXIT { setExit(); };
+        u64 language_code = 0;
+        R_ABORT_UNLESS(setGetSystemLanguage(&language_code));
+        R_ABORT_UNLESS(setMakeLanguage(language_code, &g_system_language));
+    }
+
+    MissionControlConfig *GetGlobalConfig() {
+        return &g_global_config;
+    }
+
+    SetLanguage GetSystemLanguage() {
+        return g_system_language;
     }
 
 }

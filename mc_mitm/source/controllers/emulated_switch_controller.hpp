@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -15,6 +15,7 @@
  */
 #pragma once
 #include "switch_controller.hpp"
+#include "virtual_spi_flash.hpp"
 
 namespace ams::controller {
 
@@ -26,57 +27,67 @@ namespace ams::controller {
 
         public:
             EmulatedSwitchController(const bluetooth::Address *address, HardwareID id);
-            virtual ~EmulatedSwitchController();
+            virtual ~EmulatedSwitchController() {};
 
-            virtual Result Initialize(void);
-            bool IsOfficialController(void) { return false; }
-            
-            Result HandleIncomingReport(const bluetooth::HidReport *report);
-            Result HandleOutgoingReport(const bluetooth::HidReport *report);
+            virtual Result Initialize();
+            bool IsOfficialController() { return false; }
+
+            Result HandleOutputDataReport(const bluetooth::HidReport *report) override;
 
         protected:
-            void ClearControllerState(void);
-            virtual void UpdateControllerState(const bluetooth::HidReport *report) { }
-            virtual Result SetVibration(const SwitchRumbleData *rumble_data) { return ams::ResultSuccess(); }
-            virtual Result CancelVibration(void) { return ams::ResultSuccess(); }
-            virtual Result SetPlayerLed(uint8_t led_mask) { return ams::ResultSuccess(); }
+            void ClearControllerState();
+            virtual Result SetVibration(const SwitchRumbleData *rumble_data) { AMS_UNUSED(rumble_data); return ams::ResultSuccess(); }
+            virtual Result CancelVibration() { return ams::ResultSuccess(); }
+            virtual Result SetPlayerLed(uint8_t led_mask) { AMS_UNUSED(led_mask); return ams::ResultSuccess(); }
 
-            Result HandleSubCmdReport(const bluetooth::HidReport *report);
-            Result HandleRumbleReport(const bluetooth::HidReport *report);
+            void UpdateControllerState(const bluetooth::HidReport *report) override;
+            virtual void ProcessInputData(const bluetooth::HidReport *report) { AMS_UNUSED(report); }
 
-            Result SubCmdRequestDeviceInfo(const bluetooth::HidReport *report);
-            Result SubCmdSpiFlashRead(const bluetooth::HidReport *report);
-            Result SubCmdSpiFlashWrite(const bluetooth::HidReport *report);
-            Result SubCmdSpiSectorErase(const bluetooth::HidReport *report);
-            Result SubCmdSetInputReportMode(const bluetooth::HidReport *report);
-            Result SubCmdTriggersElapsedTime(const bluetooth::HidReport *report);
-            Result SubCmdSetShipPowerState(const bluetooth::HidReport *report);
-            Result SubCmdSetMcuConfig(const bluetooth::HidReport *report);
-            Result SubCmdSetMcuState(const bluetooth::HidReport *report);
-            Result SubCmdSetPlayerLeds(const bluetooth::HidReport *report);
-            Result SubCmdSetHomeLed(const bluetooth::HidReport *report);
-            Result SubCmdEnableImu(const bluetooth::HidReport *report);
-            Result SubCmdEnableVibration(const bluetooth::HidReport *report);
+            Result HandleRumbleData(const SwitchRumbleDataEncoded *encoded);
+            Result HandleHidCommand(const SwitchHidCommand *command);
+            Result HandleNfcIrData(const uint8_t *nfc_ir);
 
-            Result FakeSubCmdResponse(const SwitchSubcommandResponse *response);
+            Result HandleHidCommandGetDeviceInfo(const SwitchHidCommand *command);
+            Result HandleHidCommandSetDataFormat(const SwitchHidCommand *command);
+            Result HandleHidCommandLRButtonDetection(const SwitchHidCommand *command);
+            Result HandleHidCommandClearPairingInfo(const SwitchHidCommand *command);
+            Result HandleHidCommandShipment(const SwitchHidCommand *command);
+            Result HandleHidCommandSerialFlashRead(const SwitchHidCommand *command);
+            Result HandleHidCommandSerialFlashWrite(const SwitchHidCommand *command);
+            Result HandleHidCommandSerialFlashSectorErase(const SwitchHidCommand *command);
+            Result HandleHidCommandMcuWrite(const SwitchHidCommand *command);
+            Result HandleHidCommandMcuResume(const SwitchHidCommand *command);
+            Result HandleHidCommandMcuPollingEnable(const SwitchHidCommand *command);
+            Result HandleHidCommandMcuPollingDisable(const SwitchHidCommand *command);
+            Result HandleHidCommandSetIndicatorLed(const SwitchHidCommand *command);
+            Result HandleHidCommandGetIndicatorLed(const SwitchHidCommand *command);
+            Result HandleHidCommandSetNotificationLed(const SwitchHidCommand *command);
+            Result HandleHidCommandSensorSleep(const SwitchHidCommand *command);
+            Result HandleHidCommandSensorConfig(const SwitchHidCommand *command);
+            Result HandleHidCommandMotorEnable(const SwitchHidCommand *command);
 
-            Result VirtualSpiFlashRead(int offset, void *data, size_t size);
-            Result VirtualSpiFlashWrite(int offset, const void *data, size_t size);
-            Result VirtualSpiFlashSectorErase(int offset);
+            Result FakeHidCommandResponse(const SwitchHidCommandResponse *response);
+            Result FakeNfcIrResponse(const SwitchNfcIrResponse *response);
 
             bool m_charging;
             bool m_ext_power;
             uint8_t m_battery;
+            uint8_t m_led_pattern;
+
             SwitchButtonData m_buttons;
             SwitchAnalogStick m_left_stick;
             SwitchAnalogStick m_right_stick;
             Switch6AxisData m_motion_data[3];
 
-            ProControllerColours m_colours;
+            uint16_t m_gyro_sensitivity;
+            uint16_t m_acc_sensitivity;
+
+            uint8_t m_input_report_mode;
+
             bool m_enable_rumble;
+            bool m_enable_motion;
 
-            fs::FileHandle m_spi_flash_file;
-
+            VirtualSpiFlash m_virtual_memory;
     };
 
 }

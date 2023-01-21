@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,12 +14,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "bluetooth_circular_buffer.hpp"
-#include <mutex>
-#include <cstring>
 
 namespace ams::bluetooth {
 
-    CircularBuffer::CircularBuffer(void) {
+    CircularBuffer::CircularBuffer() {
         this->readOffset = 0;
         this->writeOffset = 0;
         this->isInitialized = false;
@@ -38,19 +36,19 @@ namespace ams::bluetooth {
         this->isInitialized = true;
     }
 
-    void CircularBuffer::Finalize(void) {
+    void CircularBuffer::Finalize() {
         if (!this->isInitialized)
             fatalThrow(-1);
-            
+
         this->isInitialized = false;
         this->event = nullptr;
     }
 
-    bool CircularBuffer::IsInitialized(void) {
+    bool CircularBuffer::IsInitialized() {
         return this->isInitialized;
     }
 
-    u64 CircularBuffer::GetWriteableSize(void) {
+    u64 CircularBuffer::GetWriteableSize() {
         u32 readOffset = this->readOffset;
         u32 writeOffset = this->writeOffset;
 
@@ -63,7 +61,7 @@ namespace ams::bluetooth {
         else
             size = readOffset - writeOffset - 1;
 
-        if (size > BLUETOOTH_BUFFER_SIZE) 
+        if (size > BLUETOOTH_BUFFER_SIZE)
             size = 0;
 
         return size;
@@ -80,17 +78,21 @@ namespace ams::bluetooth {
 
         std::scoped_lock lk(this->mutex);
 
-        ON_SCOPE_EXIT { 
+        ON_SCOPE_EXIT {
             if (this->event)
                 os::SignalEvent(this->event);
         };
 
         if (size + sizeof(CircularBufferPacketHeader) <= this->GetWriteableSize()) {
             if (size + 2*sizeof(CircularBufferPacketHeader) > BLUETOOTH_BUFFER_SIZE - this->writeOffset) {
-                R_TRY(this->_write(0xff, nullptr, (BLUETOOTH_BUFFER_SIZE - this->writeOffset) - sizeof(CircularBufferPacketHeader)));
+                if (const auto res = this->_write(0xff, nullptr, (BLUETOOTH_BUFFER_SIZE - this->writeOffset) - sizeof(CircularBufferPacketHeader)); res != 0) {
+                    return res;
+                }
             }
 
-            R_TRY(this->_write(type, data, size));
+            if (const auto res = this->_write(type, data, size); res != 0) {
+                return res;
+            }
             this->_updateUtilization();
 
             return 0;
@@ -124,28 +126,28 @@ namespace ams::bluetooth {
         }
     }
 
-    CircularBufferPacket *CircularBuffer::Read(void) {
+    CircularBufferPacket *CircularBuffer::Read() {
         return this->_read();
     }
 
-    u64 CircularBuffer::Free(void) {
+    u64 CircularBuffer::Free() {
         if (!this->isInitialized)
             return -1;
-        
+
         if (this->readOffset == this->writeOffset)
             return -1;
-        
+
         auto packet = reinterpret_cast<CircularBufferPacket *>(&this->data[this->readOffset]);
         u32 newOffset = this->readOffset + packet->header.size + sizeof(packet->header);
-        
+
         if (newOffset >= BLUETOOTH_BUFFER_SIZE)
             newOffset = 0;
-                    
+
         if (newOffset < BLUETOOTH_BUFFER_SIZE) {
             this->readOffset = newOffset;
             return 0;
         }
-        
+
         fatalThrow(-1);
     }
 
@@ -163,11 +165,11 @@ namespace ams::bluetooth {
         this->writeOffset = offset;
     }
 
-    u32 CircularBuffer::_getWriteOffset(void) {
+    u32 CircularBuffer::_getWriteOffset() {
         return this->writeOffset;
     }
 
-    u32 CircularBuffer::_getReadOffset(void) {
+    u32 CircularBuffer::_getReadOffset() {
         return this->readOffset;
     }
 
@@ -180,7 +182,7 @@ namespace ams::bluetooth {
         if (type != 0xff) {
             if (data && (size > 0))
                 memcpy(&packet->data, data, size);
-            else 
+            else
                 return -1;
         }
 
@@ -189,21 +191,21 @@ namespace ams::bluetooth {
             return -1;
 
         if (newOffset == BLUETOOTH_BUFFER_SIZE)
-            this->writeOffset = 0; 
+            this->writeOffset = 0;
         else
             this->writeOffset = newOffset;
 
         return 0;
     }
 
-    void CircularBuffer::_updateUtilization(void) {
+    void CircularBuffer::_updateUtilization() {
         u32 newCapacity = this->isInitialized ? this->GetWriteableSize() : 0;
 
         if (this->size > newCapacity + 1000)
             this->size = newCapacity;
     }
 
-    CircularBufferPacket *CircularBuffer::_read(void) {
+    CircularBufferPacket *CircularBuffer::_read() {
         if (this->isInitialized) {
             CircularBufferPacket *packet;
             u32 newOffset;
@@ -212,24 +214,24 @@ namespace ams::bluetooth {
                     return nullptr;
 
                 packet = reinterpret_cast<CircularBufferPacket *>(&this->data[this->readOffset]);
-                
+
                 if (packet->header.type != 0xff)
                     return packet;
-                                
+
                 if (!this->isInitialized)
                     return nullptr;
-                
+
                 if (this->readOffset != this->writeOffset) {
                     newOffset = this->readOffset + packet->header.size + sizeof(packet->header);
                     if (newOffset >= BLUETOOTH_BUFFER_SIZE)
                         newOffset = 0;
-                    
+
                     this->_setReadOffset(newOffset);
                 }
-                
+
             } while (this->isInitialized);
-        }	
-        
+        }
+
         return nullptr;
     }
 

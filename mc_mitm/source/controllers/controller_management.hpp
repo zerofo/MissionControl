@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -38,6 +38,7 @@
 #include "icade_controller.hpp"
 #include "lanshen_controller.hpp"
 #include "atgames_controller.hpp"
+#include "hyperkin_controller.hpp"
 
 namespace ams::controller {
 
@@ -66,15 +67,14 @@ namespace ams::controller {
         ControllerType_ICade,
         ControllerType_LanShen,
         ControllerType_AtGames,
+        ControllerType_Hyperkin,
         ControllerType_Unknown,
     };
 
     class UnknownController : public EmulatedSwitchController {
         public:
             UnknownController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) {
-                m_colours.buttons = {0xff, 0x00, 0x00};
-            };
+            : EmulatedSwitchController(address, id) { }
     };
 
     ControllerType Identify(const bluetooth::DevicesSettings *device);
@@ -83,6 +83,6 @@ namespace ams::controller {
 
     void AttachHandler(const bluetooth::Address *address);
     void RemoveHandler(const bluetooth::Address *address);
-    SwitchController *LocateHandler(const bluetooth::Address *address);
+    std::shared_ptr<SwitchController> LocateHandler(const bluetooth::Address *address);
 
 }

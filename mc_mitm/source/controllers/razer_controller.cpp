@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -24,19 +24,18 @@ namespace ams::controller {
 
     }
 
-    void RazerController::UpdateControllerState(const bluetooth::HidReport *report) {
+    void RazerController::ProcessInputData(const bluetooth::HidReport *report) {
         auto razer_report = reinterpret_cast<const RazerReportData *>(&report->data);
 
         switch(razer_report->id) {
             case 0x01:
-                this->HandleInputReport0x01(razer_report);
-                break;
+                this->MapInputReport0x01(razer_report); break;
             default:
                 break;
         }
     }
 
-    void RazerController::HandleInputReport0x01(const RazerReportData *src) {
+    void RazerController::MapInputReport0x01(const RazerReportData *src) {
         m_left_stick.SetData(
             static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
             static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.left_stick.y)) & 0xfff

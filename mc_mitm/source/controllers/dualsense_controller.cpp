@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,6 +23,9 @@ namespace ams::controller {
 
         const constexpr float stick_scale_factor = float(UINT12_MAX) / UINT8_MAX;
 
+        constexpr float accel_scale_factor = 65535 / 16000.0f * 1000;
+        constexpr float gyro_scale_factor = 65535 / (13371 * 360.0f) * 1000;
+
         const uint8_t player_led_flags[] = {
             // Mimic the Switch's player LEDs
             0x01,
@@ -33,6 +36,17 @@ namespace ams::controller {
             0x09,
             0x19,
             0x0A
+        };
+
+        const uint8_t new_player_led_flags[] = {
+            0x04,
+            0x02,
+            0x05,
+            0x03,
+            0x07,
+            0x07,
+            0x07,
+            0x07
         };
 
         const constexpr RGBColour led_disable = {0x00, 0x00, 0x00};
@@ -50,57 +64,78 @@ namespace ams::controller {
             {0x10, 0x00, 0x30}  // purple
         };
 
+        constexpr uint32_t crc_seed = 0x8C36CCAE; // CRC32 of {0xa2, 0x31} bytes at beginning of output report
+
     }
 
-    Result DualsenseController::Initialize(void) {
-        R_TRY(EmulatedSwitchController::Initialize());
+    Result DualsenseController::Initialize() {
         R_TRY(this->PushRumbleLedState());
+        R_TRY(EmulatedSwitchController::Initialize());
+
+        // Request controller firmware version info
+        R_TRY(this->GetVersionInfo(&m_version_info));
+
+        // Request motion calibration data from DualSense
+        R_TRY(this->GetCalibrationData(&m_motion_calibration));
 
         return ams::ResultSuccess();
     }
 
     Result DualsenseController::SetVibration(const SwitchRumbleData *rumble_data) {
-        m_rumble_state.amp_motor_left  = static_cast<uint8_t>(255 * rumble_data->low_band_amp);
-        m_rumble_state.amp_motor_right = static_cast<uint8_t>(255 * rumble_data->high_band_amp);
+        m_rumble_state.amp_motor_left  = static_cast<uint8_t>(255 * std::max(rumble_data[0].low_band_amp, rumble_data[1].low_band_amp));
+        m_rumble_state.amp_motor_right = static_cast<uint8_t>(255 * std::max(rumble_data[0].high_band_amp, rumble_data[1].high_band_amp));
         return this->PushRumbleLedState();
     }
 
-    Result DualsenseController::CancelVibration(void) {
+    Result DualsenseController::CancelVibration() {
         m_rumble_state.amp_motor_left = 0;
         m_rumble_state.amp_motor_right = 0;
         return this->PushRumbleLedState();
     }
 
     Result DualsenseController::SetPlayerLed(uint8_t led_mask) {
+        auto config = mitm::GetGlobalConfig();
+
         uint8_t player_number;
         R_TRY(LedsMaskToPlayerNumber(led_mask, &player_number));
-        m_led_flags = player_led_flags[player_number];
+
+        uint16_t fw_version = *reinterpret_cast<uint16_t *>(&m_version_info.data[43]);
+
+        if (!config->misc.enable_dualsense_player_leds) {
+            m_led_flags = 0x00;
+        } else if (fw_version < 0x0282) {
+            m_led_flags = player_led_flags[player_number];
+        } else {
+            m_led_flags = new_player_led_flags[player_number];
+        }
+
+        // Disable LED fade-in
+        m_led_flags |= 0x20;
+
         RGBColour colour = player_led_colours[player_number];
         return this->SetLightbarColour(colour);
     }
 
     Result DualsenseController::SetLightbarColour(RGBColour colour) {
         auto config = mitm::GetGlobalConfig();
-        m_led_colour = config->misc.disable_sony_leds ? led_disable : colour;
+        m_led_colour = config->misc.enable_dualsense_lightbar ? colour : led_disable;
         return this->PushRumbleLedState();
     }
 
-    void DualsenseController::UpdateControllerState(const bluetooth::HidReport *report) {
+    void DualsenseController::ProcessInputData(const bluetooth::HidReport *report) {
         auto dualsense_report = reinterpret_cast<const DualsenseReportData *>(&report->data);
 
         switch(dualsense_report->id) {
             case 0x01:
-                this->HandleInputReport0x01(dualsense_report);
-                break;
+                this->MapInputReport0x01(dualsense_report); break;
             case 0x31:
-                this->HandleInputReport0x31(dualsense_report);
-                break;
+                this->MapInputReport0x31(dualsense_report); break;
             default:
                 break;
         }
     }
 
-    void DualsenseController::HandleInputReport0x01(const DualsenseReportData *src) {
+    void DualsenseController::MapInputReport0x01(const DualsenseReportData *src) {
         m_left_stick.SetData(
             static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
             static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.left_stick.y)) & 0xfff
@@ -113,7 +148,7 @@ namespace ams::controller {
         this->MapButtons(&src->input0x01.buttons);
     }
 
-    void DualsenseController::HandleInputReport0x31(const DualsenseReportData *src) {
+    void DualsenseController::MapInputReport0x31(const DualsenseReportData *src) {
         m_ext_power = src->input0x31.usb;
 
         if (!src->input0x31.usb || src->input0x31.full)
@@ -127,7 +162,7 @@ namespace ams::controller {
         if (battery_level > 10)
             battery_level = 10;
 
-        m_battery = static_cast<uint8_t>(8 * (battery_level + 1) / 10) & 0x0e;
+        m_battery = static_cast<uint8_t>(8 * (battery_level + 2) / 10) & 0x0e;
     
         m_left_stick.SetData(
             static_cast<uint16_t>(stick_scale_factor * src->input0x31.left_stick.x) & 0xfff,
@@ -139,6 +174,40 @@ namespace ams::controller {
         );
 
         this->MapButtons(&src->input0x31.buttons);
+
+        if (m_enable_motion) {
+            int16_t acc_x = -static_cast<int16_t>(accel_scale_factor * src->input0x31.acc_z / float(m_motion_calibration.acc.z_max));
+            int16_t acc_y = -static_cast<int16_t>(accel_scale_factor * src->input0x31.acc_x / float(m_motion_calibration.acc.x_max));
+            int16_t acc_z =  static_cast<int16_t>(accel_scale_factor * src->input0x31.acc_y / float(m_motion_calibration.acc.y_max));
+
+            int16_t vel_x = -static_cast<int16_t>(0.85 * gyro_scale_factor * (src->input0x31.vel_z - m_motion_calibration.gyro.roll_bias)  / ((m_motion_calibration.gyro.roll_max - m_motion_calibration.gyro.roll_bias) / m_motion_calibration.gyro.speed_max));
+            int16_t vel_y = -static_cast<int16_t>(0.85 * gyro_scale_factor * (src->input0x31.vel_x - m_motion_calibration.gyro.pitch_bias) / ((m_motion_calibration.gyro.pitch_max - m_motion_calibration.gyro.pitch_bias) / m_motion_calibration.gyro.speed_max));
+            int16_t vel_z =  static_cast<int16_t>(0.85 * gyro_scale_factor * (src->input0x31.vel_y - m_motion_calibration.gyro.yaw_bias)   / ((m_motion_calibration.gyro.yaw_max- m_motion_calibration.gyro.yaw_bias) / m_motion_calibration.gyro.speed_max));
+
+            m_motion_data[0].gyro_1  = vel_x;
+            m_motion_data[0].gyro_2  = vel_y;
+            m_motion_data[0].gyro_3  = vel_z;
+            m_motion_data[0].accel_x = acc_x;
+            m_motion_data[0].accel_y = acc_y;
+            m_motion_data[0].accel_z = acc_z;
+
+            m_motion_data[1].gyro_1  = vel_x;
+            m_motion_data[1].gyro_2  = vel_y;
+            m_motion_data[1].gyro_3  = vel_z;
+            m_motion_data[1].accel_x = acc_x;
+            m_motion_data[1].accel_y = acc_y;
+            m_motion_data[1].accel_z = acc_z;
+
+            m_motion_data[2].gyro_1  = vel_x;
+            m_motion_data[2].gyro_2  = vel_y;
+            m_motion_data[2].gyro_3  = vel_z;
+            m_motion_data[2].accel_x = acc_x;
+            m_motion_data[2].accel_y = acc_y;
+            m_motion_data[2].accel_z = acc_z;
+        }
+        else {
+            std::memset(&m_motion_data, 0, sizeof(m_motion_data));
+        }
     }
 
     void DualsenseController::MapButtons(const DualsenseButtonData *buttons) {
@@ -175,20 +244,52 @@ namespace ams::controller {
         m_buttons.home    = buttons->ps;
     }
 
-    Result DualsenseController::PushRumbleLedState(void) {
-        DualsenseOutputReport0x31 report = {0xa2, 0x31, 0x02, 0x03, 0x14, m_rumble_state.amp_motor_right, m_rumble_state.amp_motor_left};
-        report.data[41] = 0x02;
-        report.data[44] = 0x02;
-        report.data[46] = m_led_flags;
-        report.data[47] = m_led_colour.r;
-        report.data[48] = m_led_colour.g;
-        report.data[49] = m_led_colour.b;
-        report.crc = crc32Calculate(report.data, sizeof(report.data));
+    Result DualsenseController::GetVersionInfo(DualsenseVersionInfo *version_info) {
+        bluetooth::HidReport output;
+        R_TRY(this->GetFeatureReport(0x20, &output));
 
-        s_output_report.size = sizeof(report) - 1;
-        std::memcpy(s_output_report.data, &report.data[1], s_output_report.size);
+        auto response = reinterpret_cast<DualsenseReportData *>(&output.data);
+        std::memcpy(version_info, &response->feature0x20.version_info, sizeof(DualsenseVersionInfo));
 
-        return bluetooth::hid::report::SendHidReport(&m_address, &s_output_report);
+        return ams::ResultSuccess();
+    }
+
+    Result DualsenseController::GetCalibrationData(DualsenseImuCalibrationData *calibration) {
+        bluetooth::HidReport output;
+        R_TRY(this->GetFeatureReport(0x05, &output));
+
+        auto response = reinterpret_cast<DualsenseReportData *>(&output.data);
+        std::memcpy(calibration, &response->feature0x05.calibration, sizeof(DualsenseImuCalibrationData));
+
+        return ams::ResultSuccess();
+    }
+
+    Result DualsenseController::PushRumbleLedState() {
+        auto config = mitm::GetGlobalConfig();
+
+        std::scoped_lock lk(m_output_mutex);
+
+        DualsenseReportData report = {};
+        report.id = 0x31;
+        report.output0x31.data[0] = 0x02;
+        report.output0x31.data[1] = 0x03;
+        report.output0x31.data[2] = 0x54;
+        report.output0x31.data[3] = m_rumble_state.amp_motor_right;
+        report.output0x31.data[4] = m_rumble_state.amp_motor_left;
+        report.output0x31.data[37] = 0x08 - config->misc.dualsense_vibration_intensity;  // User setting is inverse of how the controller sets intensity
+        report.output0x31.data[39] = 0x02 | 0x01;
+        report.output0x31.data[42] = 0x02;
+        report.output0x31.data[43] = 0x02;
+        report.output0x31.data[44] = m_led_flags;
+        report.output0x31.data[45] = m_led_colour.r;
+        report.output0x31.data[46] = m_led_colour.g;
+        report.output0x31.data[47] = m_led_colour.b;
+        report.output0x31.crc = crc32CalculateWithSeed(crc_seed, report.output0x31.data, sizeof(report.output0x31.data));
+
+        m_output_report.size = sizeof(report.output0x31) + sizeof(report.id);
+        std::memcpy(m_output_report.data, &report, m_output_report.size);
+
+        return this->WriteDataReport(&m_output_report);
     }
 
 }

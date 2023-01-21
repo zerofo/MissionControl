@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -40,10 +40,10 @@ namespace ams::controller {
 
         uint8_t A            : 1;
         uint8_t B            : 1;
-        uint8_t              : 1;
+        uint8_t L3_g910      : 1;
         uint8_t X            : 1;
         uint8_t Y            : 1;
-        uint8_t              : 1;
+        uint8_t R3_g910      : 1;
         uint8_t LB           : 1;
         uint8_t RB           : 1;
 
@@ -90,11 +90,11 @@ namespace ams::controller {
             IpegaController(const bluetooth::Address *address, HardwareID id) 
             : EmulatedSwitchController(address, id) { }
 
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x02(const IpegaReportData *src);
-            void HandleInputReport0x07(const IpegaReportData *src);
+            void MapInputReport0x02(const IpegaReportData *src);
+            void MapInputReport0x07(const IpegaReportData *src);
 
     };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,7 +18,7 @@
 
 namespace ams::controller {
 
-    void ICadeController::UpdateControllerState(const bluetooth::HidReport *report) {
+    void ICadeController::ProcessInputData(const bluetooth::HidReport *report) {
         auto icade_report = reinterpret_cast<const ICadeReportData *>(&report->data);
 
         if (icade_report->id == 0x01) {

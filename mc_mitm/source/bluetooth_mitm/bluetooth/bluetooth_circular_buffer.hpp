@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -46,26 +46,26 @@ namespace ams::bluetooth {
     class CircularBuffer {
 
         public:
-            CircularBuffer(void);
+            CircularBuffer();
 
             void Initialize(const char *name); // 10.0.0+, previously took event argument
-            void Finalize(void);
-            bool IsInitialized(void);
-            u64 GetWriteableSize(void);
+            void Finalize();
+            bool IsInitialized();
+            u64 GetWriteableSize();
             void SetWriteCompleteEvent(os::EventType *event);
             u64 Write(u8 type, void *data, size_t size);
             void DiscardOldPackets(u8 type, u32 ageLimit);
-            CircularBufferPacket *Read(void);
-            u64 Free(void);
+            CircularBufferPacket *Read();
+            u64 Free();
 
         private:
             void _setReadOffset(u32 offset);
             void _setWriteOffset(u32 offset);
-            u32  _getWriteOffset(void);
-            u32  _getReadOffset(void);
+            u32  _getWriteOffset();
+            u32  _getReadOffset();
             u64  _write(u8 type, void *data, size_t size);
-            void _updateUtilization(void);
-            CircularBufferPacket *_read(void);
+            void _updateUtilization();
+            CircularBufferPacket *_read();
 
             os::SdkMutex  mutex;
             os::EventType *event;

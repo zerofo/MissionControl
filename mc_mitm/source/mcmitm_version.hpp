@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,6 +17,8 @@
 
 namespace ams::mitm {
 
-    extern const char *version_string;
+    extern const unsigned int mc_version;
+    extern const char *mc_build_name;
+    extern const char *mc_build_date;
 
 }

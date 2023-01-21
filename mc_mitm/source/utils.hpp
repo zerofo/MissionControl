@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,9 +18,7 @@
 
 namespace ams::utils {
 
-    s32 ConvertToHorizonPriority(s32 user_priority);
-    s32 ConvertToUserPriority(s32 horizon_priority);
-
+    bool BluetoothAddressCompare(const bluetooth::Address *addr1, const bluetooth::Address *addr2);
     Result BluetoothAddressToString(const bluetooth::Address *address, char *out, size_t out_size);
 
 }

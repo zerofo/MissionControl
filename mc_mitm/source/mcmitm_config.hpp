@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -29,11 +29,15 @@ namespace ams::mitm {
         } bluetooth;
 
         struct {
-            bool disable_sony_leds;
+            bool enable_dualshock4_lightbar;
+            bool enable_dualsense_lightbar;
+            bool enable_dualsense_player_leds;
+            int dualsense_vibration_intensity;
         } misc;
     };
 
-    MissionControlConfig *GetGlobalConfig(void);
-    void ParseIniConfig(void);
+    void InitializeConfig();
+    MissionControlConfig *GetGlobalConfig();
+    SetLanguage GetSystemLanguage();
 
 }

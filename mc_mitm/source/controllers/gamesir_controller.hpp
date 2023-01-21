@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -118,14 +118,14 @@ namespace ams::controller {
             GamesirController(const bluetooth::Address *address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
 
-            bool SupportsSetTsiCommand(void) { return false; }
+            bool SupportsSetTsiCommand() { return false; }
 
-            void UpdateControllerState(const bluetooth::HidReport *report);
+            void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
-            void HandleInputReport0x03(const GamesirReportData *src);
-            void HandleInputReport0x12(const GamesirReportData *src);
-            void HandleInputReport0xc4(const GamesirReportData *src);
+            void MapInputReport0x03(const GamesirReportData *src);
+            void MapInputReport0x12(const GamesirReportData *src);
+            void MapInputReport0xc4(const GamesirReportData *src);
 
     };
 

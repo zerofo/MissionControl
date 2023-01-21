@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -27,27 +27,30 @@ namespace ams::controller {
 
     }
 
-    Result XiaomiController::Initialize(void) {
+    Result XiaomiController::Initialize() {
         R_TRY(EmulatedSwitchController::Initialize());
-        s_output_report.size = sizeof(init_packet);
-        std::memcpy(s_output_report.data, init_packet, sizeof(init_packet));
-        R_TRY(bluetooth::hid::report::SendHidReport(&m_address, &s_output_report));
+
+        std::scoped_lock lk(m_output_mutex);
+
+        m_output_report.size = sizeof(init_packet);
+        std::memcpy(m_output_report.data, init_packet, sizeof(init_packet));
+        R_TRY(this->WriteDataReport(&m_output_report));
+        
         return ams::ResultSuccess();    
     }
     
-    void XiaomiController::UpdateControllerState(const bluetooth::HidReport *report) {
+    void XiaomiController::ProcessInputData(const bluetooth::HidReport *report) {
         auto xiaomi_report = reinterpret_cast<const XiaomiReportData *>(&report->data);
 
         switch(xiaomi_report->id) {
             case 0x04:
-                this->HandleInputReport0x04(xiaomi_report);
-                break;
+                this->MapInputReport0x04(xiaomi_report); break;
             default:
                 break;
         }
     }
 
-    void XiaomiController::HandleInputReport0x04(const XiaomiReportData *src) {
+    void XiaomiController::MapInputReport0x04(const XiaomiReportData *src) {
         m_battery = convert_battery_100(src->input0x04.battery);
 
         m_left_stick.SetData(

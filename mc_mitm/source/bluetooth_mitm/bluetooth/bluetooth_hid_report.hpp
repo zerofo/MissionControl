@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,27 +20,29 @@
 
 namespace ams::bluetooth::hid::report {
 
-    bool IsInitialized(void);
-    void WaitInitialized(void);
-    void SignalReportRead(void);
+    bool IsInitialized();
+    void WaitInitialized();
+    void SignalInitialized();
+    void SignalReportRead();
 
-    SharedMemory *GetRealSharedMemory(void);
-    SharedMemory *GetFakeSharedMemory(void);
+    os::SharedMemory *GetRealSharedMemory();
+    os::SharedMemory *GetFakeSharedMemory();
 
-    os::SystemEvent *GetSystemEvent(void);
-    os::SystemEvent *GetForwardEvent(void);
-    os::SystemEvent *GetUserForwardEvent(void);
+    os::SystemEvent *GetSystemEvent();
+    os::SystemEvent *GetForwardEvent();
+    os::SystemEvent *GetUserForwardEvent();
 
-    Result Initialize(Handle event_handle, Service *forward_service, os::ThreadId main_thread_id);
-    void Finalize(void);
+    Result Initialize();
+    void Finalize();
 
-    Result MapRemoteSharedMemory(Handle handle);
-    Result InitializeReportBuffer(void);
+    Result MapRemoteSharedMemory(os::NativeHandle handle);
+    Result InitializeReportBuffer();
 
-    Result WriteHidReportBuffer(const bluetooth::Address *address, const bluetooth::HidReport *report);
-    Result SendHidReport(const bluetooth::Address *address, const bluetooth::HidReport *report);
+    Result WriteHidDataReport(const bluetooth::Address address, const bluetooth::HidReport *report);
+    Result WriteHidSetReport(const bluetooth::Address address, uint32_t status);
+    Result WriteHidGetReport(const bluetooth::Address address, const bluetooth::HidReport *report);
 
     Result GetEventInfo(bluetooth::HidEventType *type, void *buffer, size_t size);
-    void HandleEvent(void);
+    void HandleEvent();
 
 }

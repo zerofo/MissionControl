@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -25,19 +25,18 @@ namespace ams::controller {
 
     }
 
-    void PowerAController::UpdateControllerState(const bluetooth::HidReport *report) {
+    void PowerAController::ProcessInputData(const bluetooth::HidReport *report) {
         auto powera_report = reinterpret_cast<const PowerAReportData *>(&report->data);
 
         switch(powera_report->id) {
             case 0x03:
-                this->HandleInputReport0x03(powera_report);
-                break;
+                this->MapInputReport0x03(powera_report); break;
             default:
                 break;
         }
     }
 
-    void PowerAController::HandleInputReport0x03(const PowerAReportData *src) {
+    void PowerAController::MapInputReport0x03(const PowerAReportData *src) {
         m_battery = convert_battery_255(src->input0x03.battery);
 
         m_left_stick.SetData(

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2022 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -25,16 +25,20 @@ namespace ams::controller {
         void SetData(uint16_t x, uint16_t y);
         void SetX(uint16_t x);
         void SetY(uint16_t y);
-        uint16_t GetX(void);
-        uint16_t GetY(void);
-        void InvertX(void);
-        void InvertY(void);
-    
+        uint16_t GetX();
+        uint16_t GetY();
+        void InvertX();
+        void InvertY();
+
         uint8_t m_xy[3];
     };
 
     struct SwitchAnalogStickFactoryCalibration {
         uint8_t calib[9];
+    };
+
+    struct SwitchAnalogStickParameters {
+        uint8_t stickvalues[18];
     };
 
 }
