@@ -20,7 +20,10 @@ jobs:
       run: |
           git config --global --add safe.directory `pwd` && \
           git submodule update --remote && make -j2
-          cd out; zip -r MissionControl.zip out
+          ls mc_mitm/out -la 
+          ls exefs_patches -la 
+          
+          cd mc_mitm/out; zip -r ../../MissionControl.zip *
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
