@@ -19,21 +19,19 @@ jobs:
     - name: Build project
       run: |
           git config --global --add safe.directory `pwd` && \
-          git submodule update --remote && make -j2
-          ls mc_mitm/out -la 
-          ls exefs_patches -la 
+          git submodule update --remote && make dist -j2
+
           
-          cd mc_mitm/out; zip -r ../../MissionControl.zip *
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        path: ./MissionControl.zip
+        path: ./dist/*.zip
         
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.release_token }}
-        file: ./MissionControl.zip
+        file: ./dist/*.zip
         tag: ${{ github.ref }}
         overwrite: true
         file_glob: true
