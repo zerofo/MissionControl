@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64
+
+    steps:
+    - name: Checkout project
+      uses: actions/checkout@master
+      with:
+        submodules: recursive
+
+    - name: Build project
+      run: |
+          git config --global --add safe.directory `pwd` && \
+          git submodule update --remote && make -j2
+          cd dist
+          zip -r MissionControl.zip MissionControl
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        path: ./dist
+        
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.release_token }}
+        file: MissionControl.zip
+        tag: ${{ github.ref }}
+        overwrite: true
+        file_glob: true
+        make_latest: true 
