@@ -20,18 +20,17 @@ jobs:
       run: |
           git config --global --add safe.directory `pwd` && \
           git submodule update --remote && make -j2
-          ls * -la
-          ls dist -la
+          cd out; zip -r MissionControl.zip out
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        path: ./*.zip
+        path: ./MissionControl.zip
         
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.release_token }}
-        file: ./*.zip
+        file: ./MissionControl.zip
         tag: ${{ github.ref }}
         overwrite: true
         file_glob: true
