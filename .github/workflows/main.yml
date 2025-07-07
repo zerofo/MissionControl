@@ -1,9 +1,11 @@
+---
 name: ci
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - develop
+      - master
 
 jobs:
   build:
