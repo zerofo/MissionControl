@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -226,8 +226,12 @@ namespace ams::mitm::bluetooth {
         g_redirect_ble_events = redirect;
     }
 
-    void BtdrvMitmService::SignalHidReportRead() {
-        ams::bluetooth::hid::report::SignalReportRead();
+    void BtdrvMitmService::ForwardHidReportEvent() {
+        ams::bluetooth::hid::report::ForwardHidReportEvent();
+    }
+
+    void BtdrvMitmService::ConsumeHidReportEvent() {
+        ams::bluetooth::hid::report::ConsumeHidReportEvent();
     }
 
 }

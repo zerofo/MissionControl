@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -106,7 +106,7 @@ namespace ams::controller {
             : EmulatedSwitchController(address, id) { }
 
             Result Initialize(void);
-            Result SetVibration(const SwitchRumbleData *rumble_data);
+            Result SetVibration(const SwitchMotorData *motor_data);
             Result CancelVibration();
             Result SetPlayerLed(u8 led_mask);
 

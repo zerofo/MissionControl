@@ -4,6 +4,7 @@
 <a href="https://github.com/ndeadly/MissionControl/releases"><img alt="GitHub All Releases" src="https://img.shields.io/github/downloads/ndeadly/MissionControl/total"></a>
 <a href="https://github.com/ndeadly/MissionControl/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/downloads/ndeadly/MissionControl/latest/total"></a>
 <a href="https://discord.gg/gegfNZ5Ucz"><img alt="Discord Server" src="https://discordapp.com/api/guilds/905069757361971303/widget.png?style=shield"/></a>
+<a href="https://ko-fi.com/J3J01BZZ6"><img alt="Support me on Ko-fi" src="https://img.shields.io/badge/Support%20me%20on%20Ko--fi-72A5F2?logo=ko-fi&logoColor=FF6433"/></a>
 <br>
 <a href="https://www.bitcoinqrcodemaker.com/api/?style=bitcoin&prefix=on&address=bc1q4rh4vmqaujmewrswes303nms5mj3p80j7lqat0"><img alt="Donate Bitcoin" src="https://img.shields.io/static/v1?label=donate&message=bc1q4rh4vmqaujmewrswes303nms5mj3p80j7lqat0&color=yellow&style=flat&logo=bitcoin"></a>
 <a href="https://www.bitcoinqrcodemaker.com/api/?style=ethereum&prefix=on&address=0xFD28C8680416D5c706Ad8E404955e0a3A2aA7124"><img alt="Donate Ethereum" src="https://img.shields.io/static/v1?label=donate&message=0xFD28C8680416D5c706Ad8E404955e0a3A2aA7124&color=yellow&style=flat&logo=ethereum"></a>
@@ -21,6 +22,8 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 * Support for rumble and motion controls (compatible controllers only)
 * Low input lag.
 * File-based virtual controller memory allowing for data such as analog stick calibration to be stored and retrieved.
+* Unlocks such as button remapping and stick calibration for third-party Licensed Pro Controllers.
+* Enables use of [JoyConDroid](https://github.com/TeamJCD/JoyConDroid) without root access.
 * Spoofing of host Bluetooth adapter name and address.
 * `mc.mitm` module adds extension IPC commands that can be used to interact with the `bluetooth` process without interfering with the state of the system.
 
@@ -86,7 +89,7 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 Download the [latest release](https://github.com/ndeadly/MissionControl/releases) .zip and extract to the root of your SD card, allowing the folders to merge and overwriting any existing files. Reboot your console to activate the module and you're done!
 
 ***IMPORTANT: 
-Atmosphère >= 1.7.1 is required to run the latest release of Mission Control on firmware 18.1.0. Using an older Atmosphère version will cause Mission Control to crash or freeze the system on boot.***
+Atmosphère >= 1.9.1 is required to run the latest release of Mission Control on firmware 20.1.0+. Using an older Atmosphère version will cause Mission Control to crash or freeze the system on boot.***
 
 ### Usage
 
@@ -159,6 +162,7 @@ To functionally uninstall Mission Control and its components, all that needs to 
 * `/atmosphere/contents/010000000000bd00`
 * `/atmosphere/exefs_patches/bluetooth_patches`
 * `/atmosphere/exefs_patches/btm_patches`
+* `/atmosphere/exefs_patches/hid_patches`
 
 If you wish to completely remove all traces of the software ever having been installed (telemetry excepted), you may also want to follow these additional steps
 
@@ -278,7 +282,7 @@ Unlikely. As far as I know, controllers supporting headset audio do so via propr
 
 ### How it works
 
-Mission Control works by Man-In-The-Middling the `bluetooth` system module and intercepting its initialisation IPC commands and system events, and translating incoming/outgoing data to convince the Switch that it's communicating with an official Pro Controller.
+Mission Control works by Man-In-The-Middling the `bluetooth` system module and intercepting its initialisation IPC commands and system events, and translating incoming/outgoing data to convince the Switch that it's communicating with an official Licensed Pro Controller.
 
 To achieve this, the `btdrv.mitm` module obtains the handles to `bluetooth` system events and shared memory when the system attempts to initialise them over IPC via the `btm` and `hid` modules. It then creates its own secondary versions of these and passes their handles on instead of the original. This allows modifications to be made to any data buffers before notifying (or not) the system. Additionally, the `WriteHidData` IPC command is intercepted to translate or drop outgoing requests to the controller. In the case of the latter, fake responses can be written directly to the buffer in shared memory.
 
@@ -288,36 +292,36 @@ exefs patches to the `bluetooth` module are provided to enable the pairing of Wi
 
 exefs patches to the `btm` module have been added to skip over calls to `nn::bluetooth::hal::CloseHidConnection` when a controller fails to respond correctly to the broadcom vendor command sent by `nn::bluetooth::hal::SetTsi`. This prevents all affected controllers from being disconnected immediately after connection, and eliminates the need to manually flag certain controllers with a `settsi_disable.flag` file.
 
+exefs patches to the `hid` module are used to unlock native button remapping (HOS 10.0.0+) and calibration of analog sticks and motion sensors for officially licensed 3rd party Pro Controllers.
+
 The `btm` service is now also MITM'd, allowing for faking controller names on the fly while retaining the original names in the pairing database.
 
 ### Building from source
 
-First, clone the repository to your local machine and switch to the newly cloned directory
+> Note: To build Mission Control, you will need the devkitPro toolchain installed on your system, along with the required packages for Switch development. Refer to the devkitPro [Getting Started](https://devkitpro.org/wiki/Getting_Started) guide for further info.
+
+First, check for updates to the devkitPro repositories and make sure your installed packages are up to date. You may need to re-run this command a second time if it asks to restart the pacman terminal.
+```
+pacman -Syy & pacman -Syu
+```
+
+Install `libjpeg-turbo` (a dependency of `libstratosphere`) if it isn't already installed.
+```
+pacman -S switch-libjpeg-turbo
+```
+
+Next, clone the repository to your local machine and switch to the newly cloned directory.
 ```
 git clone --recurse-submodules https://github.com/ndeadly/MissionControl.git
 cd MissionControl
 ```
 
-~~Mission Control currently uses a custom fork of `libnx` that adds Bluetooth service wrappers and type definitions.~~ Official libnx master is now used to build Mission Control. At the time of writing, the libnx distributed by devkitPro can be used without the need to build it yourself. This may change if `Atmosphere-libs` updates to use bleeding edge `libnx` commits not present in the official release. In any case, you can build the included `libnx` submodule from source with the following commands.
-
+Finally, run the make command. This will build `libstratosphere` before building the `mc.mitm` sysmodule and packaging it up in a .zip archive along with the rest of the supporting files ready for installation. The resulting package can be installed as described in the installation section above.
 ```
-cd lib/libnx
-make && make install
-```
-
-Next build `libstratosphere`. If you encounter any build errors, you may be missing required dependencies (refer to https://github.com/Atmosphere-NX/Atmosphere/blob/master/docs/building.md)
-```
-cd ../Atmosphere-libs/libstratosphere
-make
-```
-
-Finally, build and package the distribution .zip. This will build the `mc.mitm` sysmodule and package it up with bluetooth exefs patches. 
-```
-cd ../..
 make dist
 ```
 
-The resulting package can be installed as described above.
+> Note: build times (for `libstratosphere` in particular) can be quite long, especially on older machines. You may wish to build the project using multiple CPU cores via the `-j` flag to speed things up, eg. `make dist -j$(nproc)`
 
 ### Credits
 

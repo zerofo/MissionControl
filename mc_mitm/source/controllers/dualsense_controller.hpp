@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -173,7 +173,7 @@ namespace ams::controller {
             , m_rumble_state({0, 0}) { }
 
             Result Initialize();
-            Result SetVibration(const SwitchRumbleData *rumble_data);
+            Result SetVibration(const SwitchMotorData *motor_data);
             Result CancelVibration();
             Result SetPlayerLed(u8 led_mask);
             Result SetLightbarColour(RGBColour colour);

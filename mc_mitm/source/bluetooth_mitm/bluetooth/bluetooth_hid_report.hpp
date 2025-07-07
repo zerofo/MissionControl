@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,7 +23,9 @@ namespace ams::bluetooth::hid::report {
     bool IsInitialized();
     void WaitInitialized();
     void SignalInitialized();
-    void SignalReportRead();
+
+    void ForwardHidReportEvent();
+    void ConsumeHidReportEvent();
 
     os::SharedMemory *GetRealSharedMemory();
     os::SharedMemory *GetFakeSharedMemory();

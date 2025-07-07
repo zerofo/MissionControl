@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -47,6 +47,7 @@
 namespace ams::controller {
 
     constexpr const char ProControllerName[] = "Pro Controller";
+    constexpr const char LicensedProControllerName[] = "Lic Pro Controller";
     constexpr const char WiiControllerPrefix[] = "Nintendo RVL";
 
     enum ControllerType {

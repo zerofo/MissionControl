@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -41,6 +41,14 @@ namespace ams::usb {
             s32 total_entries = 0;
             UsbHsInterface interfaces[8] = {};
             R_TRY(usbHsQueryAvailableInterfaces(controller::Dualshock3Controller::GetUsbInterfaceFilter(), interfaces, sizeof(interfaces), &total_entries));
+
+            // Only connect to these services when we need them, since there is only one free handle available for either on 17.0.0+
+            R_TRY(btmInitialize());
+            R_TRY(btmsysInitialize());
+            ON_SCOPE_EXIT {
+                btmsysExit();
+                btmExit();
+            };
 
             for(int i = 0; i < total_entries; ++i) {
                 if (controller::Dualshock3Controller::UsbIdentify(&interfaces[i])) {

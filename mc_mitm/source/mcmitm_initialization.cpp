@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -96,16 +96,6 @@ namespace ams::mitm {
             }
 
             g_init_event.Signal();
-
-            // Loop until we can initialise btm:sys
-            while (R_FAILED(btmsysInitialize())) {
-                os::SleepThread(ams::TimeSpan::FromMilliSeconds(200));
-            }
-
-            // Loop until we can initialise btm
-            while (R_FAILED(btmInitialize())) {
-                os::SleepThread(ams::TimeSpan::FromMilliSeconds(200));
-            }
         }
 
     }

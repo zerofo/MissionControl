@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -41,6 +41,8 @@ namespace ams::bluetooth::hid::report {
         os::Event g_init_event(os::EventClearMode_ManualClear);
         os::Event g_report_read_event(os::EventClearMode_AutoClear);
 
+        bool g_should_forward_report = true;
+
         os::SharedMemory g_real_bt_shmem;
         os::SharedMemory g_fake_bt_shmem(BluetoothSharedMemorySize, os::MemoryPermission_ReadWrite, os::MemoryPermission_ReadWrite);
 
@@ -72,7 +74,13 @@ namespace ams::bluetooth::hid::report {
         g_init_event.Signal();
     }
 
-    void SignalReportRead() {
+    void ForwardHidReportEvent() {
+        g_should_forward_report = true;
+        g_report_read_event.Signal();
+    }
+
+    void ConsumeHidReportEvent() {
+        g_should_forward_report = false;
         g_report_read_event.Signal();
     }
 
@@ -129,10 +137,13 @@ namespace ams::bluetooth::hid::report {
 
     Result InitializeReportBuffer() {
         g_fake_bt_shmem.Map(os::MemoryPermission_ReadWrite);
-        g_fake_buffer = reinterpret_cast<bluetooth::CircularBuffer *>(g_fake_bt_shmem.GetMappedAddress());
-        g_fake_buffer->Initialize("HID Report");
-        g_fake_buffer->type = bluetooth::CircularBufferType_HidReport;
-        g_fake_buffer->_unk3 = 1;
+
+        auto event_info = reinterpret_cast<bluetooth::BufferedEventInfo *>(g_fake_bt_shmem.GetMappedAddress());
+        event_info->buffer.Initialize("HID Report");
+        event_info->type = bluetooth::EventBufferType_HidReport;
+        event_info->ready = true;
+
+        g_fake_buffer = &event_info->buffer;
 
         R_SUCCEED();
     }
@@ -344,6 +355,11 @@ namespace ams::bluetooth::hid::report {
         if (g_redirect_hid_report_events) {
             g_system_event_user_fwd.Signal();
             g_report_read_event.Wait();
+
+            // Return early if event was consumed by the client
+            if (!g_should_forward_report) {
+                return;
+            }
         }
 
         if (hos::GetVersion() >= hos::Version_12_0_0) {
