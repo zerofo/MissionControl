@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,22 +18,26 @@
 #include "mc_types.hpp"
 #include "../bluetooth_mitm/bluetooth/bluetooth_types.hpp"
 
-#define AMS_MISSION_CONTROL_INTERFACE_INFO(C, H)                                                                           \
-    AMS_SF_METHOD_INFO(C, H, 0, Result, GetVersion,            (sf::Out<u32> version),                          (version)) \
-    AMS_SF_METHOD_INFO(C, H, 1, Result, GetBuildVersionString, (sf::Out<ams::mitm::mc::VersionString> version), (version)) \
-    AMS_SF_METHOD_INFO(C, H, 2, Result, GetBuildDateString,    (sf::Out<ams::mitm::mc::DateString> version),    (version)) \
+#define AMS_MISSION_CONTROL_INTERFACE_INFO(C, H)                                                                                                                                      \
+    AMS_SF_METHOD_INFO(C, H, 0, Result, GetVersion,            (sf::Out<u32> version),                                                                  (version)                   ) \
+    AMS_SF_METHOD_INFO(C, H, 1, Result, GetBuildVersionString, (sf::Out<ams::mc::VersionString> version),                                               (version)                   ) \
+    AMS_SF_METHOD_INFO(C, H, 2, Result, GetBuildDateString,    (sf::Out<ams::mc::DateString> version),                                                  (version)                   ) \
+    AMS_SF_METHOD_INFO(C, H, 3, Result, GetHciHandle,          (bluetooth::Address address, sf::Out<u16> handle),                                       (address, handle)           ) \
+    AMS_SF_METHOD_INFO(C, H, 4, Result, SendHciCommand,        (u16 opcode, const sf::InPointerBuffer &buffer, const sf::OutPointerBuffer &out_buffer), (opcode, buffer, out_buffer)) \
+    AMS_SF_METHOD_INFO(C, H, 5, Result, DmSetConfig,           (const ams::mc::BsaSetConfig &set_config),                                               (set_config)                ) \
 
-AMS_SF_DEFINE_INTERFACE(ams::mitm::mc, IMissionControlInterface, AMS_MISSION_CONTROL_INTERFACE_INFO, 0x30eba3d4)
+AMS_SF_DEFINE_INTERFACE(ams::mc, IMissionControlInterface, AMS_MISSION_CONTROL_INTERFACE_INFO, 0x30eba3d4)
 
-namespace ams::mitm::mc {
+namespace ams::mc {
 
     class MissionControlService {
-        private:
-
         public:
             Result GetVersion(sf::Out<u32> version);
-            Result GetBuildVersionString(sf::Out<ams::mitm::mc::VersionString> version);
-            Result GetBuildDateString(sf::Out<ams::mitm::mc::DateString> date);
+            Result GetBuildVersionString(sf::Out<ams::mc::VersionString> version);
+            Result GetBuildDateString(sf::Out<ams::mc::DateString> date);
+            Result GetHciHandle(bluetooth::Address address, sf::Out<u16> handle);
+            Result SendHciCommand(u16 opcode, const sf::InPointerBuffer &buffer, const sf::OutPointerBuffer &out_buffer);
+            Result DmSetConfig(const ams::mc::BsaSetConfig &set_config);
     };
     static_assert(IsIMissionControlInterface<MissionControlService>);
 

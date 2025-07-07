@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,7 +23,8 @@ extern "C" {
 Result btdrvInitializeBluetoothFwd(Service* srv, Handle *out_handle);
 Result btdrvEnableBluetoothFwd(Service* srv);
 Result btdrvInitializeHidFwd(Service* srv, Handle *out_handle, u16 version);
-Result btdrvWriteHidDataFwd(Service* srv, const BtdrvAddress *address, const BtdrvHidReport *data);
+Result btdrvWriteHidDataFwd(Service* srv, const BtdrvAddress *address, const BtdrvHidReport *report);
+Result btdrvWriteHidData2Fwd(Service* srv, const BtdrvAddress *address, const void *data, size_t size);
 Result btdrvRegisterHidReportEventFwd(Service* srv, Handle *out_handle);
 Result btdrvGetHidReportEventInfoFwd(Service* srv, Handle *out_handle);
 Result btdrvInitializeBleFwd(Service* srv, Handle *out_handle);

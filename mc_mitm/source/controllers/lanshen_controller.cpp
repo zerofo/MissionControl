@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,12 +18,6 @@
 
 namespace ams::controller {
 
-    namespace {
-
-        const constexpr float stick_scale_factor = float(UINT12_MAX) / UINT8_MAX;
-
-    }
-
     void LanShenController::ProcessInputData(const bluetooth::HidReport *report) {
         auto LanShen_report = reinterpret_cast<const LanShenReportData *>(&report->data);
 
@@ -36,27 +30,21 @@ namespace ams::controller {
     }
 
     void LanShenController::MapInputReport0x01(const LanShenReportData *src) {
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.right_stick.y)) & 0xfff
-        );
+        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
         
-        m_buttons.dpad_down   = (src->input0x01.buttons.dpad == LanShenDPad_S)  ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_SE) ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_SW);
-        m_buttons.dpad_up     = (src->input0x01.buttons.dpad == LanShenDPad_N)  ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_NW);
-        m_buttons.dpad_right  = (src->input0x01.buttons.dpad == LanShenDPad_E)  ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_SE);
-        m_buttons.dpad_left   = (src->input0x01.buttons.dpad == LanShenDPad_W)  ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_NW) ||
-                                (src->input0x01.buttons.dpad == LanShenDPad_SW);
+        m_buttons.dpad_down  = (src->input0x01.buttons.dpad == LanShenDPad_S)  ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_SE) ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_SW);
+        m_buttons.dpad_up    = (src->input0x01.buttons.dpad == LanShenDPad_N)  ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_NW);
+        m_buttons.dpad_right = (src->input0x01.buttons.dpad == LanShenDPad_E)  ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_SE);
+        m_buttons.dpad_left  = (src->input0x01.buttons.dpad == LanShenDPad_W)  ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_NW) ||
+                               (src->input0x01.buttons.dpad == LanShenDPad_SW);
 
         m_buttons.A = src->input0x01.buttons.B;
         m_buttons.B = src->input0x01.buttons.A;
@@ -66,7 +54,7 @@ namespace ams::controller {
         m_buttons.R  = src->input0x01.buttons.R1;
         m_buttons.ZR = src->input0x01.buttons.R2;
         m_buttons.L  = src->input0x01.buttons.L1;
-        m_buttons.ZL = src->input0x01.buttons.L2; 
+        m_buttons.ZL = src->input0x01.buttons.L2;
 
         //m_buttons.minus = src->input0x01.buttons.select;
         m_buttons.plus  = src->input0x01.buttons.start;

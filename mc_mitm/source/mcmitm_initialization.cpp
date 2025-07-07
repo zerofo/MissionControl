@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -27,17 +27,43 @@
 #include "bluetooth_mitm/bluetooth/bluetooth_hid.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_hid_report.hpp"
 #include "bluetooth_mitm/bluetooth/bluetooth_ble.hpp"
+#include "usb/mc_usb_handler.hpp"
 
 namespace ams::mitm {
 
     namespace {
 
-        const s32 ThreadPriority = -7;
-        const size_t ThreadStackSize = 0x1000;
-        alignas(os::ThreadStackAlignment) u8 g_thread_stack[ThreadStackSize];
-        os::ThreadType g_thread;
-
         os::Event g_init_event(os::EventClearMode_ManualClear);
+
+        Result OverrideHostAddress(const ams::bluetooth::Address *host_address) {
+            if (hos::GetVersion() < hos::Version_12_0_0) {
+                R_TRY(btdrvLegacySetAdapterProperty(BtdrvBluetoothPropertyType_Address, host_address, sizeof(ams::bluetooth::Address)));
+            }
+            else {
+                BtdrvAdapterProperty property;
+                property.type = BtdrvAdapterPropertyType_Address;
+                property.size = sizeof(ams::bluetooth::Address);
+                std::memcpy(property.data, host_address, sizeof(ams::bluetooth::Address));
+                R_TRY(btdrvSetAdapterProperty(BtdrvAdapterPropertyType_Address, &property));
+            }
+
+            R_SUCCEED();
+        }
+
+        Result OverrideHostName(const char *host_name) {
+            if (hos::GetVersion() < hos::Version_12_0_0) {
+                R_TRY(btdrvLegacySetAdapterProperty(BtdrvBluetoothPropertyType_Name, host_name, std::strlen(host_name)));
+            }
+            else {
+                BtdrvAdapterProperty property;
+                property.type = BtdrvAdapterPropertyType_Name;
+                property.size = std::strlen(host_name);
+                std::memcpy(property.data, host_name, std::strlen(host_name));
+                R_TRY(btdrvSetAdapterProperty(BtdrvAdapterPropertyType_Name, &property));
+            }
+
+            R_SUCCEED();
+        }
 
         void InitializeThreadFunc(void *) {
             // Start async worker thread(s)
@@ -61,30 +87,12 @@ namespace ams::mitm {
             // Set bluetooth adapter host address override
             ams::bluetooth::Address null_address = {};
             if (std::memcmp(&config->bluetooth.host_address, &null_address, sizeof(ams::bluetooth::Address)) != 0) {
-                if (hos::GetVersion() < hos::Version_12_0_0) {
-                    R_ABORT_UNLESS(btdrvLegacySetAdapterProperty(BtdrvBluetoothPropertyType_Address, &config->bluetooth.host_address, sizeof(ams::bluetooth::Address)));
-                }
-                else {
-                    BtdrvAdapterProperty property;
-                    property.type = BtdrvAdapterPropertyType_Address;
-                    property.size = sizeof(ams::bluetooth::Address);
-                    std::memcpy(property.data, &config->bluetooth.host_address, sizeof(ams::bluetooth::Address));
-                    R_ABORT_UNLESS(btdrvSetAdapterProperty(BtdrvAdapterPropertyType_Address, &property));
-                }
+                R_ABORT_UNLESS(OverrideHostAddress(&config->bluetooth.host_address));
             }
 
             // Set bluetooth adapter host name override
             if (std::strlen(config->bluetooth.host_name) > 0) {
-                if (hos::GetVersion() < hos::Version_12_0_0) {
-                    R_ABORT_UNLESS(btdrvLegacySetAdapterProperty(BtdrvBluetoothPropertyType_Name, config->bluetooth.host_name, std::strlen(config->bluetooth.host_name)));
-                }
-                else {
-                    BtdrvAdapterProperty property;
-                    property.type = BtdrvAdapterPropertyType_Name;
-                    property.size = std::strlen(config->bluetooth.host_name);
-                    std::memcpy(property.data, config->bluetooth.host_name, std::strlen(config->bluetooth.host_name));
-                    R_ABORT_UNLESS(btdrvSetAdapterProperty(BtdrvAdapterPropertyType_Name, &property));
-                }
+                R_ABORT_UNLESS(OverrideHostName(config->bluetooth.host_name));
             }
 
             g_init_event.Signal();
@@ -92,33 +100,48 @@ namespace ams::mitm {
 
     }
 
-    void StartInitialize() {
-        R_ABORT_UNLESS(os::CreateThread(&g_thread,
+    void LaunchModules() {
+        constexpr s32 ThreadPriority = -7;
+        constexpr size_t ThreadStackSize = 0x1000;
+        os::ThreadType init_thread;
+
+        // Allocate temporary thread stack on heap
+        struct alignas(os::ThreadStackAlignment) ThreadStack { u8 stack[ThreadStackSize]; };
+        auto thread_stack = std::make_unique<ThreadStack>();
+
+        // Create and start background initialisation thread
+        R_ABORT_UNLESS(os::CreateThread(&init_thread,
             InitializeThreadFunc,
             nullptr,
-            g_thread_stack,
+            thread_stack.get(),
             ThreadStackSize,
             ThreadPriority
         ));
+        os::SetThreadNamePointer(&init_thread, "mc::InitThread");
+        os::StartThread(&init_thread);
 
-        os::SetThreadNamePointer(&g_thread, "mc::InitThread");
-        os::StartThread(&g_thread);
+        // Launch IPC servers
+        ams::mitm::bluetooth::Launch();
+        ams::mitm::btm::Launch();
+        ams::mc::Launch();
+
+        // Launch additional modules
+        ams::usb::Launch();
+
+        // Wait for initialisation thread to terminate
+        os::WaitThread(&init_thread);
+        os::DestroyThread(&init_thread);
+    }
+
+    void WaitModules() {
+        ams::usb::WaitFinished();
+        ams::mc::WaitFinished();
+        ams::mitm::btm::WaitFinished();
+        ams::mitm::bluetooth::WaitFinished();
     }
 
     void WaitInitialized() {
         g_init_event.Wait();
-    }
-
-    void LaunchModules() {
-        R_ABORT_UNLESS(ams::mitm::bluetooth::Launch());
-        R_ABORT_UNLESS(ams::mitm::btm::Launch());
-        R_ABORT_UNLESS(ams::mitm::mc::Launch());
-    }
-
-    void WaitModules() {
-        ams::mitm::mc::WaitFinished();
-        ams::mitm::btm::WaitFinished();
-        ams::mitm::bluetooth::WaitFinished();
     }
 
 }

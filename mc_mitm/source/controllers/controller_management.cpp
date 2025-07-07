@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -21,9 +21,10 @@ namespace ams::controller {
 
     namespace {
 
-        const std::string official_npad_names[] = {
+        const std::string OfficialGamepadNames[] = {
             "NintendoGamepad",
-            "Joy-Con",
+            "Joy-Con (L)",
+            "Joy-Con (R)",
             "Pro Controller",
             "Lic Pro Controller",
             "NES Controller",
@@ -31,26 +32,41 @@ namespace ams::controller {
             "SNES Controller",
             "N64 Controller",
             "MD/Gen Control Pad",
+            "Lic2 Pro Controller",
+            "Lic3 Pro Controller",
         };
 
-        constexpr auto cod_major_peripheral  = 0x05;
-        constexpr auto cod_minor_gamepad     = 0x08;
-        constexpr auto cod_minor_joystick    = 0x04;
-        constexpr auto cod_minor_keyboard    = 0x40;
+        constexpr u8 DeviceClassMajorPeripheral = 0x05;
+        constexpr u8 DeviceClassMinorGamepad    = 0x08;
+        constexpr u8 DeviceClassMinorJoystick   = 0x04;
+        constexpr u8 DeviceClassMinorKeyboard   = 0x40;
 
-        os::Mutex g_controller_lock(false);
+        constinit os::SdkMutex g_controller_lock;
         std::vector<std::shared_ptr<SwitchController>> g_controllers;
 
     }
 
     ControllerType Identify(const bluetooth::DevicesSettings *device) {
 
+        for (auto hwId : SwitchController::hardware_ids) {
+            if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
+                return ControllerType_Switch;
+            }
+        }
+
+        // Additionally check controller name against known official Nintendo controllers, as some controllers (eg. JoyCons paired via rails) don't report the correct vid/pid
         if (IsOfficialSwitchControllerName(hos::GetVersion() < hos::Version_13_0_0 ? device->name.name : device->name2))
             return ControllerType_Switch;
 
         for (auto hwId : WiiController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
                 return ControllerType_Wii;
+            }
+        }
+
+        for (auto hwId : Dualshock3Controller::hardware_ids) {
+            if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
+                return ControllerType_Dualshock3;
             }
         }
 
@@ -117,8 +133,8 @@ namespace ams::controller {
         for (auto hwId : NvidiaShieldController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
                 return ControllerType_NvidiaShield;
-			}
-		}
+          }
+        }
 
         for (auto hwId : EightBitDoController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
@@ -156,13 +172,13 @@ namespace ams::controller {
             }
         }
 
-		for (auto hwId : LanShenController::hardware_ids) {
+        for (auto hwId : LanShenController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
                 return ControllerType_LanShen;
             }
         }
 
-		for (auto hwId : AtGamesController::hardware_ids) {
+        for (auto hwId : AtGamesController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
                 return ControllerType_AtGames;
             }
@@ -174,16 +190,34 @@ namespace ams::controller {
             }
         }
 
+        for (auto hwId : BetopController::hardware_ids) {
+            if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
+                return ControllerType_Betop;
+            }
+        }
+
+        for (auto hwId : AtariController::hardware_ids) {
+            if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
+                return ControllerType_Atari;
+            }
+        }
+
+        for (auto hwId : BionikController::hardware_ids) {
+            if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
+                return ControllerType_Bionik;
+            }
+        }
+
         return ControllerType_Unknown;
     }
 
     bool IsAllowedDeviceClass(const bluetooth::DeviceClass *cod) {
-        return ((cod->class_of_device[1] & 0x0f) == cod_major_peripheral) &&
-               (((cod->class_of_device[2] & 0x0f) == cod_minor_gamepad) || ((cod->class_of_device[2] & 0x0f) == cod_minor_joystick) || ((cod->class_of_device[2] & 0x40) == cod_minor_keyboard));
+        return ((cod->class_of_device[1] & 0x0f) == DeviceClassMajorPeripheral) &&
+               (((cod->class_of_device[2] & 0x0f) == DeviceClassMinorGamepad) || ((cod->class_of_device[2] & 0x0f) == DeviceClassMinorJoystick) || ((cod->class_of_device[2] & 0x40) == DeviceClassMinorKeyboard));
     }
 
     bool IsOfficialSwitchControllerName(const std::string& name) {
-        for (auto n : official_npad_names) {
+        for (auto n : OfficialGamepadNames) {
             if (name.rfind(n, 0) == 0)
                 return true;
         }
@@ -205,6 +239,9 @@ namespace ams::controller {
                 break;
             case ControllerType_Wii:
                 controller = std::make_shared<WiiController>(address, id);
+                break;
+            case ControllerType_Dualshock3:
+                controller = std::make_shared<Dualshock3Controller>(address, id);
                 break;
             case ControllerType_Dualshock4:
                 controller = std::make_shared<Dualshock4Controller>(address, id);
@@ -266,6 +303,15 @@ namespace ams::controller {
             case ControllerType_Hyperkin:
                 controller = std::make_shared<HyperkinController>(address, id);
                 break;
+            case ControllerType_Betop:
+                controller = std::make_shared<BetopController>(address, id);
+                break;
+            case ControllerType_Atari:
+                controller = std::make_shared<AtariController>(address, id);
+                break;
+            case ControllerType_Bionik:
+                controller = std::make_shared<BionikController>(address, id);
+                break;
             default:
                 controller = std::make_shared<UnknownController>(address, id);
                 break;
@@ -297,9 +343,9 @@ namespace ams::controller {
         std::scoped_lock lk(g_controller_lock);
 
         for (auto it = g_controllers.begin(); it < g_controllers.end(); ++it) {
-                if (utils::BluetoothAddressCompare(&(*it)->Address(), address)) {
-                    return (*it);
-                }
+            if (utils::BluetoothAddressCompare(&(*it)->Address(), address)) {
+                return (*it);
+            }
         }
 
         return nullptr;

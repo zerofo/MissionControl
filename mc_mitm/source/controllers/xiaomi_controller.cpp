@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -21,9 +21,9 @@ namespace ams::controller {
 
     namespace {
 
-        constexpr uint8_t init_packet[] = {0x20, 0x00, 0x00};  // packet to init vibration apparently
+        constexpr u8 TriggerMax = UINT8_MAX;
 
-        const constexpr float stick_scale_factor = float(UINT12_MAX) / UINT8_MAX;
+        constinit const u8 InitPacket[] = { 0x20, 0x00, 0x00 };  // packet to init vibration apparently
 
     }
 
@@ -32,13 +32,13 @@ namespace ams::controller {
 
         std::scoped_lock lk(m_output_mutex);
 
-        m_output_report.size = sizeof(init_packet);
-        std::memcpy(m_output_report.data, init_packet, sizeof(init_packet));
+        m_output_report.size = sizeof(InitPacket);
+        std::memcpy(m_output_report.data, InitPacket, sizeof(InitPacket));
         R_TRY(this->WriteDataReport(&m_output_report));
-        
-        return ams::ResultSuccess();    
+
+        R_SUCCEED();
     }
-    
+
     void XiaomiController::ProcessInputData(const bluetooth::HidReport *report) {
         auto xiaomi_report = reinterpret_cast<const XiaomiReportData *>(&report->data);
 
@@ -53,27 +53,21 @@ namespace ams::controller {
     void XiaomiController::MapInputReport0x04(const XiaomiReportData *src) {
         m_battery = convert_battery_100(src->input0x04.battery);
 
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x04.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x04.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x04.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x04.right_stick.y)) & 0xfff
-        );
-        
-        m_buttons.dpad_down   = (src->input0x04.buttons.dpad == XiaomiDPad_S)  ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_SE) ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_SW);
-        m_buttons.dpad_up     = (src->input0x04.buttons.dpad == XiaomiDPad_N)  ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_NE) ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_NW);
-        m_buttons.dpad_right  = (src->input0x04.buttons.dpad == XiaomiDPad_E)  ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_NE) ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_SE);
-        m_buttons.dpad_left   = (src->input0x04.buttons.dpad == XiaomiDPad_W)  ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_NW) ||
-                                (src->input0x04.buttons.dpad == XiaomiDPad_SW);
+        m_left_stick  = PackAnalogStickValues(src->input0x04.left_stick.x,  InvertAnalogStickValue(src->input0x04.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x04.right_stick.x, InvertAnalogStickValue(src->input0x04.right_stick.y));
+
+        m_buttons.dpad_down  = (src->input0x04.buttons.dpad == XiaomiDPad_S)  ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_SE) ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_SW);
+        m_buttons.dpad_up    = (src->input0x04.buttons.dpad == XiaomiDPad_N)  ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_NE) ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_NW);
+        m_buttons.dpad_right = (src->input0x04.buttons.dpad == XiaomiDPad_E)  ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_NE) ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_SE);
+        m_buttons.dpad_left  = (src->input0x04.buttons.dpad == XiaomiDPad_W)  ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_NW) ||
+                               (src->input0x04.buttons.dpad == XiaomiDPad_SW);
 
         m_buttons.A = src->input0x04.buttons.B;
         m_buttons.B = src->input0x04.buttons.A;
@@ -81,17 +75,17 @@ namespace ams::controller {
         m_buttons.Y = src->input0x04.buttons.X;
 
         m_buttons.R  = src->input0x04.buttons.R1;
-        m_buttons.ZR = src->input0x04.buttons.R2;
+        m_buttons.ZR = src->input0x04.right_trigger > (m_trigger_threshold * TriggerMax);
         m_buttons.L  = src->input0x04.buttons.L1;
-        m_buttons.ZL = src->input0x04.buttons.L2; 
+        m_buttons.ZL = src->input0x04.left_trigger  > (m_trigger_threshold * TriggerMax);
 
         m_buttons.minus = src->input0x04.buttons.back;
         m_buttons.plus  = src->input0x04.buttons.menu;
 
         m_buttons.lstick_press = src->input0x04.buttons.lstick_press;
-        m_buttons.rstick_press = src->input0x04.buttons.rstick_press;    
+        m_buttons.rstick_press = src->input0x04.buttons.rstick_press;
 
-        m_buttons.home     = src->input0x04.home;
+        m_buttons.home = src->input0x04.home;
     }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,7 +20,7 @@ namespace ams::controller {
 
     namespace {
 
-        constexpr float stick_scale_factor = float(UINT12_MAX) / UINT8_MAX;
+        constexpr u8 TriggerMax = UINT8_MAX;
 
     }
 
@@ -36,27 +36,21 @@ namespace ams::controller {
     }
 
     void RazerController::MapInputReport0x01(const RazerReportData *src) {
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.right_stick.y)) & 0xfff
-        );
-        
-        m_buttons.dpad_down   = (src->input0x01.buttons.dpad == RazerDPad_S)  ||
-                                (src->input0x01.buttons.dpad == RazerDPad_SE) ||
-                                (src->input0x01.buttons.dpad == RazerDPad_SW);
-        m_buttons.dpad_up     = (src->input0x01.buttons.dpad == RazerDPad_N)  ||
-                                (src->input0x01.buttons.dpad == RazerDPad_NE) ||
-                                (src->input0x01.buttons.dpad == RazerDPad_NW);
-        m_buttons.dpad_right  = (src->input0x01.buttons.dpad == RazerDPad_E)  ||
-                                (src->input0x01.buttons.dpad == RazerDPad_NE) ||
-                                (src->input0x01.buttons.dpad == RazerDPad_SE);
-        m_buttons.dpad_left   = (src->input0x01.buttons.dpad == RazerDPad_W)  ||
-                                (src->input0x01.buttons.dpad == RazerDPad_NW) ||
-                                (src->input0x01.buttons.dpad == RazerDPad_SW);
+        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
+
+        m_buttons.dpad_down  = (src->input0x01.buttons.dpad == RazerDPad_S)  ||
+                               (src->input0x01.buttons.dpad == RazerDPad_SE) ||
+                               (src->input0x01.buttons.dpad == RazerDPad_SW);
+        m_buttons.dpad_up    = (src->input0x01.buttons.dpad == RazerDPad_N)  ||
+                               (src->input0x01.buttons.dpad == RazerDPad_NE) ||
+                               (src->input0x01.buttons.dpad == RazerDPad_NW);
+        m_buttons.dpad_right = (src->input0x01.buttons.dpad == RazerDPad_E)  ||
+                               (src->input0x01.buttons.dpad == RazerDPad_NE) ||
+                               (src->input0x01.buttons.dpad == RazerDPad_SE);
+        m_buttons.dpad_left  = (src->input0x01.buttons.dpad == RazerDPad_W)  ||
+                               (src->input0x01.buttons.dpad == RazerDPad_NW) ||
+                               (src->input0x01.buttons.dpad == RazerDPad_SW);
 
         m_buttons.A = src->input0x01.buttons.B;
         m_buttons.B = src->input0x01.buttons.A;
@@ -64,15 +58,15 @@ namespace ams::controller {
         m_buttons.Y = src->input0x01.buttons.X;
 
         m_buttons.R  = src->input0x01.buttons.R1;
-        m_buttons.ZR = src->input0x01.right_trigger > 0;
+        m_buttons.ZR = src->input0x01.right_trigger > (m_trigger_threshold * TriggerMax);
         m_buttons.L  = src->input0x01.buttons.L1;
-        m_buttons.ZL = src->input0x01.left_trigger > 0; 
+        m_buttons.ZL = src->input0x01.left_trigger  > (m_trigger_threshold * TriggerMax);
 
         m_buttons.minus = src->input0x01.buttons.select;
         m_buttons.plus  = src->input0x01.buttons.start;
 
         m_buttons.lstick_press = src->input0x01.buttons.L3;
-        m_buttons.rstick_press = src->input0x01.buttons.R3;    
+        m_buttons.rstick_press = src->input0x01.buttons.R3;
 
         m_buttons.capture = src->input0x01.buttons.back;
         m_buttons.home    = src->input0x01.buttons.home;

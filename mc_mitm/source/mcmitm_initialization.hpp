@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,9 +17,8 @@
 
 namespace ams::mitm {
 
-    void StartInitialize();
-    void WaitInitialized();
     void LaunchModules();
     void WaitModules();
+    void WaitInitialized();
 
 }

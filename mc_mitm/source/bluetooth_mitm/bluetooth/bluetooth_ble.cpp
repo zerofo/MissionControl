@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,9 +20,9 @@ namespace ams::bluetooth::ble {
 
     namespace {
 
-        os::Mutex g_event_data_lock(false);
-        bluetooth::BleEventInfo g_event_info;
-        bluetooth::BleEventType g_current_event_type;
+        constinit os::SdkMutex g_event_data_lock;
+        constinit bluetooth::BleEventInfo g_event_info;
+        constinit bluetooth::BleEventType g_current_event_type;
 
         os::SystemEvent g_system_event;
         os::SystemEvent g_system_event_fwd(os::EventClearMode_AutoClear, true);
@@ -30,6 +30,7 @@ namespace ams::bluetooth::ble {
 
         os::Event g_init_event(os::EventClearMode_ManualClear);
         os::Event g_data_read_event(os::EventClearMode_AutoClear);
+
     }
 
     bool IsInitialized() {
@@ -57,19 +58,19 @@ namespace ams::bluetooth::ble {
     }
 
     Result GetEventInfo(bluetooth::BleEventType *type, void *buffer, size_t size) {
-        std::scoped_lock lk(g_event_data_lock); 
+        std::scoped_lock lk(g_event_data_lock);
 
         *type = g_current_event_type;
         std::memcpy(buffer, &g_event_info, size);
 
         g_data_read_event.Signal();
         
-        return ams::ResultSuccess();
+        R_SUCCEED();
     }
 
     void HandleEvent() {
         {
-            std::scoped_lock lk(g_event_data_lock); 
+            std::scoped_lock lk(g_event_data_lock);
             R_ABORT_UNLESS(btdrvGetBleManagedEventInfo(&g_event_info, sizeof(bluetooth::BleEventInfo), &g_current_event_type));
         }
 

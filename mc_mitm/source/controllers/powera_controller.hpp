@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -30,57 +30,50 @@ namespace ams::controller {
         PowerADPad_Released = 0x0f
     };
 
-    struct PowerAStickData {
-        uint8_t x;
-        uint8_t y;
-    } __attribute__((packed));
-
     struct PowerAButtonData {
-        uint8_t dpad    : 4;
-        uint8_t A       : 1;
-        uint8_t B       : 1;
-        uint8_t X       : 1;
-        uint8_t Y       : 1;
+        u8 dpad   : 4;
+        u8 A      : 1;
+        u8 B      : 1;
+        u8 X      : 1;
+        u8 Y      : 1;
 
-        uint8_t L1      : 1;
-        uint8_t R1      : 1;
-        uint8_t select  : 1;
-        uint8_t start   : 1;
-        uint8_t L3      : 1;
-        uint8_t R3      : 1;
-        uint8_t         : 0;
-    } __attribute__((packed));
+        u8 L1     : 1;
+        u8 R1     : 1;
+        u8 select : 1;
+        u8 start  : 1;
+        u8 L3     : 1;
+        u8 R3     : 1;
+        u8        : 0;
+    } PACKED;
 
     struct PowerAInputReport0x03 {
-        PowerAStickData left_stick;
-        PowerAStickData right_stick;
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick;
         PowerAButtonData buttons;
-        uint8_t L2;
-        uint8_t R2;
-        uint8_t battery;
-        uint8_t _unk;
-    } __attribute__((packed));
+        u8 L2;
+        u8 R2;
+        u8 battery;
+        u8 _unk;
+    } PACKED;
 
     struct PowerAReportData{
-        uint8_t id;
+        u8 id;
         union {
             PowerAInputReport0x03 input0x03;
         };
-    } __attribute__((packed));
+    } PACKED;
 
-    class PowerAController : public EmulatedSwitchController {
+    class PowerAController final : public EmulatedSwitchController {
 
         public:
-            static constexpr const HardwareID hardware_ids[] = { 
+            static constexpr const HardwareID hardware_ids[] = {
                 {0x20d6, 0x89e5},   // Moga Hero Controller
                 {0x20d6, 0x0dad},   // Moga Pro Controller
                 {0x20d6, 0x6271}    // Moga Pro 2 Controller
-            };  
+            };
 
-            PowerAController(const bluetooth::Address *address, HardwareID id) 
+            PowerAController(const bluetooth::Address *address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
-
-            bool SupportsSetTsiCommand() { return false; }
 
             void ProcessInputData(const bluetooth::HidReport *report) override;
 

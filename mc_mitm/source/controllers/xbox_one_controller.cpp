@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,17 +20,17 @@ namespace ams::controller {
 
     namespace {
 
-        constexpr float stick_scale_factor = float(UINT12_MAX) / UINT16_MAX;
+        constexpr u16 TriggerMax = 0x3ff;
 
     }
 
-    Result XboxOneController::SetVibration(const SwitchRumbleData *rumble_data) {
+    Result XboxOneController::SetVibration(const SwitchMotorData *motor_data) {
         auto report = reinterpret_cast<XboxOneReportData *>(m_output_report.data);
         m_output_report.size = sizeof(XboxOneOutputReport0x03) + 1;
         report->id = 0x03;
         report->output0x03.enable             = 0x3;
-        report->output0x03.magnitude_strong   = static_cast<uint8_t>(100 * std::max(rumble_data[0].low_band_amp, rumble_data[1].low_band_amp));
-        report->output0x03.magnitude_weak     = static_cast<uint8_t>(100 * std::max(rumble_data[0].high_band_amp, rumble_data[1].high_band_amp));
+        report->output0x03.magnitude_strong   = static_cast<u8>(100 * std::max(motor_data->left_motor.low_band_amp, motor_data->right_motor.low_band_amp));
+        report->output0x03.magnitude_weak     = static_cast<u8>(100 * std::max(motor_data->left_motor.high_band_amp, motor_data->right_motor.high_band_amp));
         report->output0x03.pulse_sustain_10ms = 1;
         report->output0x03.pulse_release_10ms = 0;
         report->output0x03.loop_count         = 0;
@@ -54,17 +54,11 @@ namespace ams::controller {
     }
 
     void XboxOneController::MapInputReport0x01(const XboxOneReportData *src, bool new_format) {
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT16_MAX - src->input0x01.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT16_MAX - src->input0x01.right_stick.y)) & 0xfff
-        );
+        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
 
-        m_buttons.ZR = src->input0x01.right_trigger > 0;
-        m_buttons.ZL = src->input0x01.left_trigger > 0;
+        m_buttons.ZR = src->input0x01.right_trigger > (m_trigger_threshold * TriggerMax);
+        m_buttons.ZL = src->input0x01.left_trigger  > (m_trigger_threshold * TriggerMax);
 
         if (new_format) {
             m_buttons.dpad_down  = (src->input0x01.buttons.dpad == XboxOneDPad_S)  ||
@@ -95,8 +89,7 @@ namespace ams::controller {
             m_buttons.rstick_press = src->input0x01.buttons.rstick_press;
 
             m_buttons.home = src->input0x01.buttons.guide;
-        }
-        else {
+        } else {
             m_buttons.dpad_down  = (src->input0x01.old.buttons.dpad == XboxOneDPad_S)  ||
                                    (src->input0x01.old.buttons.dpad == XboxOneDPad_SE) ||
                                    (src->input0x01.old.buttons.dpad == XboxOneDPad_SW);

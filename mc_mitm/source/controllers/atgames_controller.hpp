@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -30,42 +30,40 @@ namespace ams::controller {
         AtGamesDPad_Released = 0x08
     };
 
-    struct AtGamesStickData {
-        uint8_t x;
-        uint8_t y;
-    } __attribute__((packed));
-
     struct AtGamesInputReport0x01 {
-        uint8_t rewind          : 1;
-        uint8_t nudge_front     : 1;
-        uint8_t                 : 2;
-        uint8_t nudge_left      : 1;
-        uint8_t flipper_right   : 1;
-        uint8_t                 : 1;
-        uint8_t play            : 1;
+        u8 rewind        : 1;
+        u8 nudge_front   : 1;
+        u8 b_button      : 1;
+        u8 y_button      : 1;
+        u8 nudge_left    : 1;
+        u8 flipper_right : 1;
+        u8 x_button      : 1;
+        u8 play          : 1;
 
-        uint8_t                 : 1;
-        uint8_t home_twirl      : 1;
-        uint8_t flipper_left    : 1;
-        uint8_t nudge_right     : 1;
-        uint8_t                 : 0;
+        u8 a_button      : 1;
+        u8 home_twirl    : 1;
+        u8 flipper_left  : 1;
+        u8 nudge_right   : 1;
+        u8 z_button      : 1;
+        u8 c_button      : 1;
+        u8               : 0;
 
-        uint8_t unk1[2];
-        uint8_t dpad;
-        AtGamesStickData left_stick;
-        AtGamesStickData right_stick; // Only right stick y-axis is used for plunger
-        uint8_t unk2;
+        u8 unk1[2];
+        u8 dpad;
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick; // Only right stick y-axis is used for plunger
+        u8 unk2;
 
-    } __attribute__((packed));
+    } PACKED;
 
     struct AtGamesReportData {
-        uint8_t id;
+        u8 id;
         union {
             AtGamesInputReport0x01 input0x01;
         };
-    } __attribute__((packed));
+    } PACKED;
 
-    class AtGamesController : public EmulatedSwitchController {
+    class AtGamesController final : public EmulatedSwitchController {
 
         public:
             static constexpr const HardwareID hardware_ids[] = {
@@ -73,12 +71,14 @@ namespace ams::controller {
             };
 
             AtGamesController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            : EmulatedSwitchController(address, id), m_arcadepanel(false) { }
 
             void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
             void MapInputReport0x01(const AtGamesReportData *src);
+        
+            bool m_arcadepanel;
 
     };
 

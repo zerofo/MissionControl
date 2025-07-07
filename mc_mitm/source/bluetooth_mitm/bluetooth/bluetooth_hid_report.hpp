@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,7 +23,9 @@ namespace ams::bluetooth::hid::report {
     bool IsInitialized();
     void WaitInitialized();
     void SignalInitialized();
-    void SignalReportRead();
+
+    void ForwardHidReportEvent();
+    void ConsumeHidReportEvent();
 
     os::SharedMemory *GetRealSharedMemory();
     os::SharedMemory *GetFakeSharedMemory();
@@ -39,7 +41,7 @@ namespace ams::bluetooth::hid::report {
     Result InitializeReportBuffer();
 
     Result WriteHidDataReport(const bluetooth::Address address, const bluetooth::HidReport *report);
-    Result WriteHidSetReport(const bluetooth::Address address, uint32_t status);
+    Result WriteHidSetReport(const bluetooth::Address address, u32 status);
     Result WriteHidGetReport(const bluetooth::Address address, const bluetooth::HidReport *report);
 
     Result GetEventInfo(bluetooth::HidEventType *type, void *buffer, size_t size);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -42,105 +42,101 @@ namespace ams::controller {
         SteelseriesDPad2_NW,
     };
 
-    struct SteelseriesStickData {
-        uint8_t x;
-        uint8_t y;
-    } __attribute__ ((__packed__));
-
     struct SteelseriesButtonData {
-        uint8_t A       : 1;
-        uint8_t B       : 1;
-        uint8_t         : 1;
-        uint8_t X       : 1;
-        uint8_t Y       : 1;
-        uint8_t         : 1;
-        uint8_t L       : 1;
-        uint8_t R       : 1;
+        u8 A      : 1;
+        u8 B      : 1;
+        u8        : 1;
+        u8 X      : 1;
+        u8 Y      : 1;
+        u8        : 1;
+        u8 L1     : 1;
+        u8 R1     : 1;
 
-        uint8_t         : 3;
-        uint8_t start   : 1;
-        uint8_t select  : 1;
-        uint8_t         : 0;
-    } __attribute__ ((__packed__));
-
-    struct SteelseriesButtonData2 {
-        uint8_t A       : 1;
-        uint8_t B       : 1;
-        uint8_t         : 1;
-        uint8_t X       : 1;
-        uint8_t Y       : 1;
-        uint8_t         : 1;
-        uint8_t L1      : 1;
-        uint8_t R1      : 1;
-
-        uint8_t L2      : 1;
-        uint8_t R2      : 1;
-        uint8_t start   : 1;
-        uint8_t select  : 1;
-        uint8_t         : 1;
-        uint8_t L3      : 1;
-        uint8_t R3      : 1;
-        uint8_t         : 0;
-    } __attribute__ ((__packed__));
+        u8 L2     : 1;
+        u8 R2     : 1;
+        u8        : 1;
+        u8 start  : 1;
+        u8 select : 1;
+        u8 L3     : 1;
+        u8 R3     : 1;
+        u8        : 0;
+    } PACKED;
 
     struct SteelseriesMfiButtonData {
-        uint8_t dpad_up;
-        uint8_t dpad_right;
-        uint8_t dpad_down;
-        uint8_t dpad_left;
-        uint8_t A;
-        uint8_t B;
-        uint8_t X;
-        uint8_t Y;
-        uint8_t L1;
-        uint8_t R1;
-        uint8_t L2;
-        uint8_t R2;
+        u8 dpad_up;
+        u8 dpad_right;
+        u8 dpad_down;
+        u8 dpad_left;
+        u8 A;
+        u8 B;
+        u8 X;
+        u8 Y;
+        u8 L1;
+        u8 R1;
+        u8 L2;
+        u8 R2;
 
-        uint8_t menu : 1;
-        uint8_t      : 0;
-    } __attribute__ ((__packed__));
+        u8 menu : 1;
+        u8      : 0;
+    } PACKED;
 
     struct SteelseriesMfiInputReport {
         SteelseriesMfiButtonData buttons;
-        SteelseriesStickData left_stick;
-        SteelseriesStickData right_stick;
-    } __attribute__((packed));
+        AnalogStick<s8> left_stick;
+        AnalogStick<s8> right_stick;
+    } PACKED;
 
     struct SteelseriesInputReport0x01 {
-        uint8_t dpad;
-        SteelseriesStickData left_stick;
-        SteelseriesStickData right_stick;
+        u8 dpad;
+        AnalogStick<s8> left_stick;
+        AnalogStick<s8> right_stick;
         SteelseriesButtonData buttons;
-    } __attribute__((packed));
+    } PACKED;
+
+    struct SteelseriesInputReport0x01_v2 {
+        u8 dpad;
+        SteelseriesButtonData buttons;
+        AnalogStick<s16> left_stick;
+        AnalogStick<s16> right_stick;
+        u16 right_trigger;
+        u16 left_trigger;
+    } PACKED;
+
+    struct SteelseriesInputReport0x02 {
+        u8 select : 1;
+        u8 home   : 1;
+        u8        : 0;
+    } PACKED;
 
     struct SteelseriesInputReport0x12 {
-        uint8_t      : 3;
-        uint8_t home : 1;
-        uint8_t      : 0;
+        u8      : 3;
+        u8 home : 1;
+        u8      : 0;
         
-        uint8_t _unk0[2];
+        u8 _unk0[2];
 
-        uint8_t _unk1;  // Maybe battery
+        u8 _unk1;  // Maybe battery
         
-    } __attribute__((packed));
+    } PACKED;
 
     struct SteelseriesInputReport0xc4 {
-        SteelseriesStickData left_stick;
-        SteelseriesStickData right_stick;
-        uint8_t left_trigger;
-        uint8_t right_trigger;
-        SteelseriesButtonData2 buttons;
-        uint8_t dpad;
-        uint8_t _unk[2];
-    } __attribute__((packed));
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick;
+        u8 left_trigger;
+        u8 right_trigger;
+        SteelseriesButtonData buttons;
+        u8 dpad;
+        u8 _unk[2];
+    } PACKED;
 
     struct SteelseriesReportData {
         union {
             struct {
-                uint8_t id;
+                u8 id;
                 union {
                     SteelseriesInputReport0x01 input0x01;
+                    SteelseriesInputReport0x01_v2 input0x01_v2;
+                    SteelseriesInputReport0x02 input0x02;
                     SteelseriesInputReport0x12 input0x12;
                     SteelseriesInputReport0xc4 input0xc4;
                 };
@@ -148,26 +144,27 @@ namespace ams::controller {
 
             SteelseriesMfiInputReport input_mfi;
         };
-    } __attribute__((packed));
+    } PACKED;
 
-    class SteelseriesController : public EmulatedSwitchController {
+    class SteelseriesController final : public EmulatedSwitchController {
 
         public:
             static constexpr const HardwareID hardware_ids[] = {
                 {0x1038, 0x1412},   // Steelseries Free
                 {0x0111, 0x1420},   // Steelseries Nimbus
-                {0x0111, 0x1431}    // Steelseries Stratus Duo
+                {0x0111, 0x1431},   // Steelseries Stratus Duo
+                {0x0111, 0x1419}    // Steelseries Stratus XL
             };
 
             SteelseriesController(const bluetooth::Address *address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
 
-            bool SupportsSetTsiCommand() { return !(m_id.pid == 0x1412); }
-
             void ProcessInputData(const bluetooth::HidReport *report) override;
 
         private:
             void MapInputReport0x01(const SteelseriesReportData *src);
+            void MapInputReport0x01_v2(const SteelseriesReportData *src);
+            void MapInputReport0x02(const SteelseriesReportData *src);
             void MapInputReport0x12(const SteelseriesReportData *src);
             void MapInputReport0xc4(const SteelseriesReportData *src);
             void MapMfiInputReport(const SteelseriesReportData *src);

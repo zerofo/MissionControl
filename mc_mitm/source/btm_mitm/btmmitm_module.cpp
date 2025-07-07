@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -58,10 +58,10 @@ namespace ams::mitm::btm {
             }
         }
 
-        const s32 ThreadPriority = 9;
-        const size_t ThreadStackSize = 0x1000;
-        alignas(os::ThreadStackAlignment) u8 g_thread_stack[ThreadStackSize];
-        os::ThreadType g_thread;
+        constexpr s32 ThreadPriority = 9;
+        constexpr size_t ThreadStackSize = 0x1000;
+        alignas(os::ThreadStackAlignment) constinit u8 g_thread_stack[ThreadStackSize];
+        constinit os::ThreadType g_thread;
         
         void BtmMitmThreadFunction(void *) {
             R_ABORT_UNLESS((g_server_manager.RegisterMitmServer<BtmMitmService>(PortIndex_BtmMitm, BtmMitmServiceName)));
@@ -70,8 +70,8 @@ namespace ams::mitm::btm {
 
     }
 
-    Result Launch() {
-        R_TRY(os::CreateThread(&g_thread,
+    void Launch() {
+        R_ABORT_UNLESS(os::CreateThread(&g_thread,
             BtmMitmThreadFunction,
             nullptr,
             g_thread_stack,
@@ -81,8 +81,6 @@ namespace ams::mitm::btm {
 
         os::SetThreadNamePointer(&g_thread, "mc::BtmMitmThread");
         os::StartThread(&g_thread);
-
-        return ams::ResultSuccess();
     }
 
     void WaitFinished() {

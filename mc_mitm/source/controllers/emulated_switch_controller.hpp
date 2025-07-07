@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,10 +19,6 @@
 
 namespace ams::controller {
 
-    inline uint8_t ScaleRumbleAmplitude(float amp, uint8_t lower, uint8_t upper) {
-        return amp > 0.0 ? static_cast<uint8_t>(amp * (upper - lower) + lower) : 0;
-    }
-
     class EmulatedSwitchController : public SwitchController {
 
         public:
@@ -36,16 +32,16 @@ namespace ams::controller {
 
         protected:
             void ClearControllerState();
-            virtual Result SetVibration(const SwitchRumbleData *rumble_data) { AMS_UNUSED(rumble_data); return ams::ResultSuccess(); }
-            virtual Result CancelVibration() { return ams::ResultSuccess(); }
-            virtual Result SetPlayerLed(uint8_t led_mask) { AMS_UNUSED(led_mask); return ams::ResultSuccess(); }
+            virtual Result SetVibration(const SwitchMotorData *motor_data) { AMS_UNUSED(motor_data); R_SUCCEED(); }
+            virtual Result CancelVibration() { R_SUCCEED(); }
+            virtual Result SetPlayerLed(u8 led_mask) { AMS_UNUSED(led_mask); R_SUCCEED(); }
 
             void UpdateControllerState(const bluetooth::HidReport *report) override;
             virtual void ProcessInputData(const bluetooth::HidReport *report) { AMS_UNUSED(report); }
 
-            Result HandleRumbleData(const SwitchRumbleDataEncoded *encoded);
+            Result HandleRumbleData(const SwitchEncodedMotorData *enc_motor_data);
             Result HandleHidCommand(const SwitchHidCommand *command);
-            Result HandleNfcIrData(const uint8_t *nfc_ir);
+            Result HandleMcuCommand(const SwitchMcuCommand *command);
 
             Result HandleHidCommandGetDeviceInfo(const SwitchHidCommand *command);
             Result HandleHidCommandSetDataFormat(const SwitchHidCommand *command);
@@ -56,6 +52,7 @@ namespace ams::controller {
             Result HandleHidCommandSerialFlashWrite(const SwitchHidCommand *command);
             Result HandleHidCommandSerialFlashSectorErase(const SwitchHidCommand *command);
             Result HandleHidCommandMcuWrite(const SwitchHidCommand *command);
+            Result HandleHidCommandConfigureMcu(const SwitchHidCommand *command);
             Result HandleHidCommandMcuResume(const SwitchHidCommand *command);
             Result HandleHidCommandMcuPollingEnable(const SwitchHidCommand *command);
             Result HandleHidCommandMcuPollingDisable(const SwitchHidCommand *command);
@@ -66,26 +63,35 @@ namespace ams::controller {
             Result HandleHidCommandSensorConfig(const SwitchHidCommand *command);
             Result HandleHidCommandMotorEnable(const SwitchHidCommand *command);
 
+            Result HandleMcuCommandSetMcuMode();
+            Result HandleMcuCommandGetMcuMode();
+            Result HandleMcuCommandReadDeviceMode();
+
             Result FakeHidCommandResponse(const SwitchHidCommandResponse *response);
-            Result FakeNfcIrResponse(const SwitchNfcIrResponse *response);
+            Result FakeMcuResponse(const SwitchMcuResponse *response);
 
             bool m_charging;
             bool m_ext_power;
-            uint8_t m_battery;
-            uint8_t m_led_pattern;
+            u8 m_battery;
+            u8 m_led_pattern;
 
             SwitchButtonData m_buttons;
             SwitchAnalogStick m_left_stick;
             SwitchAnalogStick m_right_stick;
-            Switch6AxisData m_motion_data[3];
+            Vec3d<float> m_accel;
+            Vec3d<float> m_gyro;
 
-            uint16_t m_gyro_sensitivity;
-            uint16_t m_acc_sensitivity;
+            u8 m_input_report_mode;
 
-            uint8_t m_input_report_mode;
+            SwitchRumbleHandler m_rumble_handler;
+            std::unique_ptr<SwitchMotionPacker> m_motion_packer = std::make_unique<NullMotionPacker>();
 
             bool m_enable_rumble;
             bool m_enable_motion;
+
+            float m_trigger_threshold;
+
+            McuModeType m_mcu_mode;
 
             VirtualSpiFlash m_virtual_memory;
     };

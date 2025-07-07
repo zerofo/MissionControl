@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,19 +20,22 @@ namespace ams::mitm {
 
     namespace {
 
-        constexpr const char *config_file_location = "sdmc:/config/MissionControl/missioncontrol.ini";
+        constexpr const char config_file_location[] = "sdmc:/config/MissionControl/missioncontrol.ini";
 
-        SetLanguage g_system_language;
+        constinit SetLanguage g_system_language;
 
-        MissionControlConfig g_global_config = {
+        constinit MissionControlConfig g_global_config = {
             .general = {
                 .enable_rumble = true,
                 .enable_motion = true
             },
             .misc = {
-                .enable_dualshock4_lightbar = true,
-                .enable_dualsense_lightbar = true,
-                .enable_dualsense_player_leds = true,
+                .analog_trigger_activation_threshold = 50,
+                .dualshock3_led_mode = 0,
+                .dualshock4_polling_rate = 8,
+                .dualshock4_lightbar_brightness = 5,
+                .dualsense_lightbar_brightness = 5,
+                .dualsense_enable_player_leds = true,
                 .dualsense_vibration_intensity = 4
             }
         };
@@ -46,25 +49,29 @@ namespace ams::mitm {
 
         void ParseInt(const char *value, int *out, int min=INT_MIN, int max=INT_MAX) {
             int tmp = std::strtol(value, nullptr, 10);
-            if ((tmp >= min) && (tmp <= max))
+            if ((tmp >= min) && (tmp <= max)) {
                 *out = tmp;
+            }
         }
 
         void ParseBluetoothAddress(const char *value, bluetooth::Address *out) {
             // Check length of address string is correct
-            if (std::strlen(value) != 3*sizeof(bluetooth::Address) - 1) return;
+            if (std::strlen(value) != 3*sizeof(bluetooth::Address) - 1) {
+                return;
+            }
 
             // Parse bluetooth mac address
             char buf[2 + 1];
             bluetooth::Address address = {};
-            for (uint32_t i = 0; i < sizeof(bluetooth::Address); ++i) {
+            for (u32 i = 0; i < sizeof(bluetooth::Address); ++i) {
                 // Convert hex pair to number
                 std::memcpy(buf, &value[i*3], 2);
-                address.address[i] = static_cast<uint8_t>(std::strtoul(buf, nullptr, 16));
+                address.address[i] = static_cast<u8>(std::strtoul(buf, nullptr, 16));
 
                 // Check for colon separator
-                if ((i < sizeof(bluetooth::Address) - 1) && (value[i*3 + 2] != ':'))
+                if ((i < sizeof(bluetooth::Address) - 1) && (value[i*3 + 2] != ':')) {
                     return;
+                }
             }
 
             *out = address;
@@ -74,58 +81,65 @@ namespace ams::mitm {
             auto config = reinterpret_cast<MissionControlConfig *>(user);
 
             if (strcasecmp(section, "general") == 0) {
-                if (strcasecmp(name, "enable_rumble") == 0)
-                    ParseBoolean(value, &config->general.enable_rumble);  
-                else if (strcasecmp(name, "enable_motion") == 0)
-                    ParseBoolean(value, &config->general.enable_motion); 
-            }
-            else if (strcasecmp(section, "bluetooth") == 0) {
-                if (strcasecmp(name, "host_name") == 0)
+                if (strcasecmp(name, "enable_rumble") == 0) {
+                    ParseBoolean(value, &config->general.enable_rumble);
+                } else if (strcasecmp(name, "enable_motion") == 0) {
+                    ParseBoolean(value, &config->general.enable_motion);
+                }
+            } else if (strcasecmp(section, "bluetooth") == 0) {
+                if (strcasecmp(name, "host_name") == 0) {
                     std::strncpy(config->bluetooth.host_name, value, sizeof(config->bluetooth.host_name));
-                else if (strcasecmp(name, "host_address") == 0)
+                } else if (strcasecmp(name, "host_address") == 0) {
                     ParseBluetoothAddress(value, &config->bluetooth.host_address);
-            }
-            else if (strcasecmp(section, "misc") == 0) {
-                if (strcasecmp(name, "enable_dualshock4_lightbar") == 0)
-                    ParseBoolean(value, &config->misc.enable_dualshock4_lightbar);
-                else if (strcasecmp(name, "enable_dualsense_lightbar") == 0)
-                    ParseBoolean(value, &config->misc.enable_dualsense_lightbar);
-                else if (strcasecmp(name, "enable_dualsense_player_leds") == 0)
-                    ParseBoolean(value, &config->misc.enable_dualsense_player_leds);
-                else if (strcasecmp(name, "dualsense_vibration_intensity") == 0)
+                }
+            } else if (strcasecmp(section, "misc") == 0) {
+                if (strcasecmp(name, "analog_trigger_activation_threshold") == 0) {
+                    ParseInt(value, &config->misc.analog_trigger_activation_threshold, 0, 100);
+                } else if (strcasecmp(name, "dualshock3_led_mode") == 0) {
+                    ParseInt(value, &config->misc.dualshock3_led_mode, 0, 2);
+                } else if (strcasecmp(name, "dualshock4_polling_rate") == 0) {
+                    ParseInt(value, &config->misc.dualshock4_polling_rate, 0, 16);
+                } else if (strcasecmp(name, "dualshock4_lightbar_brightness") == 0) {
+                    ParseInt(value, &config->misc.dualshock4_lightbar_brightness, 0, 9);
+                } else if (strcasecmp(name, "dualsense_lightbar_brightness") == 0) {
+                    ParseInt(value, &config->misc.dualsense_lightbar_brightness, 0, 9);
+                } else if (strcasecmp(name, "dualsense_enable_player_leds") == 0) {
+                    ParseBoolean(value, &config->misc.dualsense_enable_player_leds);
+                } else if (strcasecmp(name, "dualsense_vibration_intensity") == 0) {
                     ParseInt(value, &config->misc.dualsense_vibration_intensity, 1, 8);
-            }
-            else {
+                }
+            } else {
                 return 0;
             }
 
             return 1;
         }
 
-    }
-
-    void ParseIniConfig() {
-        /* Open the file. */
-        fs::FileHandle file;
-        {
-            if (R_FAILED(fs::OpenFile(std::addressof(file), config_file_location, fs::OpenMode_Read))) {
-                return;
+        void ParseIniConfiguration() {
+            fs::FileHandle file;
+            {
+                if (R_FAILED(fs::OpenFile(std::addressof(file), config_file_location, fs::OpenMode_Read))) {
+                    return;
+                }
             }
-        }
-        ON_SCOPE_EXIT { fs::CloseFile(file); };
+            ON_SCOPE_EXIT { fs::CloseFile(file); };
 
-        /* Parse the config. */
-        util::ini::ParseFile(file, &g_global_config, ConfigIniHandler);
+            util::ini::ParseFile(file, &g_global_config, ConfigIniHandler);
+        }
+
+        void ReadSystemLanguage() {
+            R_ABORT_UNLESS(setInitialize());
+            ON_SCOPE_EXIT { setExit(); };
+            u64 language_code = 0;
+            R_ABORT_UNLESS(setGetSystemLanguage(&language_code));
+            R_ABORT_UNLESS(setMakeLanguage(language_code, &g_system_language));
+        }
+
     }
 
-    void InitializeConfig() {
-        ParseIniConfig();
-
-        R_ABORT_UNLESS(setInitialize());
-        ON_SCOPE_EXIT { setExit(); };
-        u64 language_code = 0;
-        R_ABORT_UNLESS(setGetSystemLanguage(&language_code));
-        R_ABORT_UNLESS(setMakeLanguage(language_code, &g_system_language));
+    void LoadConfiguration() {
+        ParseIniConfiguration();
+        ReadSystemLanguage();
     }
 
     MissionControlConfig *GetGlobalConfig() {

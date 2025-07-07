@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,6 +19,7 @@
 
 #include "switch_controller.hpp"
 #include "wii_controller.hpp"
+#include "dualshock3_controller.hpp"
 #include "dualshock4_controller.hpp"
 #include "dualsense_controller.hpp"
 #include "xbox_one_controller.hpp"
@@ -39,15 +40,20 @@
 #include "lanshen_controller.hpp"
 #include "atgames_controller.hpp"
 #include "hyperkin_controller.hpp"
+#include "betop_controller.hpp"
+#include "atari_controller.hpp"
+#include "bionik_controller.hpp"
 
 namespace ams::controller {
 
-    const constexpr char* pro_controller_name = "Pro Controller";
-    const constexpr char* wii_controller_prefix = "Nintendo RVL";
+    constexpr const char ProControllerName[] = "Pro Controller";
+    constexpr const char LicensedProControllerName[] = "Lic Pro Controller";
+    constexpr const char WiiControllerPrefix[] = "Nintendo RVL";
 
     enum ControllerType {
         ControllerType_Switch,
         ControllerType_Wii,
+        ControllerType_Dualshock3,
         ControllerType_Dualshock4,
         ControllerType_Dualsense,
         ControllerType_XboxOne,
@@ -68,6 +74,9 @@ namespace ams::controller {
         ControllerType_LanShen,
         ControllerType_AtGames,
         ControllerType_Hyperkin,
+        ControllerType_Betop,
+        ControllerType_Atari,
+        ControllerType_Bionik,
         ControllerType_Unknown,
     };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -21,7 +21,7 @@ namespace ams::controller {
 
     namespace {
 
-        constexpr float stick_scale_factor = float(UINT12_MAX) / UINT16_MAX;
+        constexpr u16 TriggerMax = UINT16_MAX;
 
     }
 
@@ -43,19 +43,13 @@ namespace ams::controller {
     }
     
     void OuyaController::MapInputReport0x07(const OuyaReportData *src) {
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x07.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT16_MAX - src->input0x07.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x07.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT16_MAX - src->input0x07.right_stick.y)) & 0xfff
-        );
-        
-        m_buttons.dpad_down    = src->input0x07.buttons.dpad_down;
-        m_buttons.dpad_up      = src->input0x07.buttons.dpad_up;
-        m_buttons.dpad_right   = src->input0x07.buttons.dpad_right;
-        m_buttons.dpad_left    = src->input0x07.buttons.dpad_left;
+        m_left_stick  = PackAnalogStickValues(src->input0x07.left_stick.x,  InvertAnalogStickValue(src->input0x07.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x07.right_stick.x, InvertAnalogStickValue(src->input0x07.right_stick.y));
+
+        m_buttons.dpad_down  = src->input0x07.buttons.dpad_down;
+        m_buttons.dpad_up    = src->input0x07.buttons.dpad_up;
+        m_buttons.dpad_right = src->input0x07.buttons.dpad_right;
+        m_buttons.dpad_left  = src->input0x07.buttons.dpad_left;
         
         m_buttons.A = src->input0x07.buttons.A;
         m_buttons.B = src->input0x07.buttons.O;
@@ -63,9 +57,9 @@ namespace ams::controller {
         m_buttons.Y = src->input0x07.buttons.U;
 
         m_buttons.R  = src->input0x07.buttons.RB;
-        m_buttons.ZR = src->input0x07.buttons.RT;
+        m_buttons.ZR = src->input0x07.right_trigger > (m_trigger_threshold * TriggerMax);
         m_buttons.L  = src->input0x07.buttons.LB;
-        m_buttons.ZL = src->input0x07.buttons.LT;
+        m_buttons.ZL = src->input0x07.left_trigger  > (m_trigger_threshold * TriggerMax);
 
         m_buttons.minus = 0;
         m_buttons.plus  = 0;
@@ -73,7 +67,7 @@ namespace ams::controller {
         m_buttons.lstick_press = src->input0x07.buttons.LS;
         m_buttons.rstick_press = src->input0x07.buttons.RS;
 
-        m_buttons.home    = src->input0x07.buttons.center_hold;
+        m_buttons.home = src->input0x07.buttons.center_hold;
     }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,7 +20,8 @@ namespace ams::controller {
 
     namespace {
 
-        const constexpr float stick_scale_factor = float(UINT12_MAX) / UINT8_MAX;
+        constexpr u8 TriggerMax = UINT8_MAX;
+        constexpr float MediaModeStickScaleFactor = float(UINT12_MAX) / 39;
 
     }
 
@@ -32,33 +33,33 @@ namespace ams::controller {
                 this->MapInputReport0x01(madcatz_report); break;
             case 0x02:
                 this->MapInputReport0x02(madcatz_report); break;
+            case 0x81:
+                this->MapInputReport0x81(madcatz_report); break;
+            case 0x82:
+                this->MapInputReport0x82(madcatz_report); break;
+            case 0x83:
+                this->MapInputReport0x83(madcatz_report); break;
             default:
                 break;
         }
     }
 
     void MadCatzController::MapInputReport0x01(const MadCatzReportData *src) {
-        m_left_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.left_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.left_stick.y)) & 0xfff
-        );
-        m_right_stick.SetData(
-            static_cast<uint16_t>(stick_scale_factor * src->input0x01.right_stick.x) & 0xfff,
-            static_cast<uint16_t>(stick_scale_factor * (UINT8_MAX - src->input0x01.right_stick.y)) & 0xfff
-        );
-        
-        m_buttons.dpad_down   = (src->input0x01.buttons.dpad == MadCatzDPad_S)  ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_SE) ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_SW);
-        m_buttons.dpad_up     = (src->input0x01.buttons.dpad == MadCatzDPad_N)  ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_NE) ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_NW);
-        m_buttons.dpad_right  = (src->input0x01.buttons.dpad == MadCatzDPad_E)  ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_NE) ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_SE);
-        m_buttons.dpad_left   = (src->input0x01.buttons.dpad == MadCatzDPad_W)  ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_NW) ||
-                                (src->input0x01.buttons.dpad == MadCatzDPad_SW);
+        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
+
+        m_buttons.dpad_down  = (src->input0x01.buttons.dpad == MadCatzDPad_S)  ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_SE) ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_SW);
+        m_buttons.dpad_up    = (src->input0x01.buttons.dpad == MadCatzDPad_N)  ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_NE) ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_NW);
+        m_buttons.dpad_right = (src->input0x01.buttons.dpad == MadCatzDPad_E)  ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_NE) ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_SE);
+        m_buttons.dpad_left  = (src->input0x01.buttons.dpad == MadCatzDPad_W)  ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_NW) ||
+                               (src->input0x01.buttons.dpad == MadCatzDPad_SW);
 
         m_buttons.A = src->input0x01.buttons.B;
         m_buttons.B = src->input0x01.buttons.A;
@@ -66,9 +67,9 @@ namespace ams::controller {
         m_buttons.Y = src->input0x01.buttons.X;
 
         m_buttons.R  = src->input0x01.buttons.R1;
-        m_buttons.ZR = src->input0x01.right_trigger > 0;
+        m_buttons.ZR = src->input0x01.right_trigger > (m_trigger_threshold * TriggerMax);
         m_buttons.L  = src->input0x01.buttons.L1;
-        m_buttons.ZL = src->input0x01.left_trigger > 0; 
+        m_buttons.ZL = src->input0x01.left_trigger  > (m_trigger_threshold * TriggerMax);
 
         m_buttons.minus = src->input0x01.buttons.select;
         m_buttons.plus  = src->input0x01.buttons.start;
@@ -82,6 +83,69 @@ namespace ams::controller {
     void MadCatzController::MapInputReport0x02(const MadCatzReportData *src) {
         // Media buttons
         m_buttons.home = src->input0x02.play;
+    }
+
+    void MadCatzController::MapInputReport0x81(const MadCatzReportData *src) {
+        m_left_stick  = PackAnalogStickValues(src->input0x81.left_stick.x,  InvertAnalogStickValue(src->input0x81.left_stick.y));
+        m_right_stick = PackAnalogStickValues(src->input0x81.right_stick.x, InvertAnalogStickValue(src->input0x81.right_stick.y));
+
+        m_buttons.dpad_down  = (src->input0x81.buttons.dpad == MadCatzDPad_S)  ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_SE) ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_SW);
+        m_buttons.dpad_up    = (src->input0x81.buttons.dpad == MadCatzDPad_N)  ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_NE) ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_NW);
+        m_buttons.dpad_right = (src->input0x81.buttons.dpad == MadCatzDPad_E)  ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_NE) ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_SE);
+        m_buttons.dpad_left  = (src->input0x81.buttons.dpad == MadCatzDPad_W)  ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_NW) ||
+                               (src->input0x81.buttons.dpad == MadCatzDPad_SW);
+
+        m_buttons.A = src->input0x81.buttons.B;
+        m_buttons.B = src->input0x81.buttons.A;
+        m_buttons.X = src->input0x81.buttons.Y;
+        m_buttons.Y = src->input0x81.buttons.X;
+
+        m_buttons.R  = src->input0x81.buttons.R1;
+        m_buttons.ZR = src->input0x81.right_trigger > (m_trigger_threshold * TriggerMax);
+        m_buttons.L  = src->input0x81.buttons.L1;
+        m_buttons.ZL = src->input0x81.left_trigger  > (m_trigger_threshold * TriggerMax);
+
+        m_buttons.minus = src->input0x81.buttons.select;
+        m_buttons.plus  = src->input0x81.buttons.start;
+
+        m_buttons.lstick_press = src->input0x81.buttons.L3;
+        m_buttons.rstick_press = src->input0x81.buttons.R3;
+    }
+
+    void MadCatzController::MapInputReport0x82(const MadCatzReportData *src) {
+        m_buttons.dpad_up    = (src->input0x82.buttons.dpad & 0x01) != 0;
+        m_buttons.dpad_down  = (src->input0x82.buttons.dpad & 0x02) != 0;
+        m_buttons.dpad_left  = (src->input0x82.buttons.dpad & 0x04) != 0;
+        m_buttons.dpad_right = (src->input0x82.buttons.dpad & 0x08) != 0;
+
+        m_buttons.A = src->input0x82.buttons.B;
+        m_buttons.X = src->input0x82.buttons.Y;
+        m_buttons.Y = src->input0x82.buttons.X;
+
+        m_buttons.R = src->input0x82.buttons.R1;
+        m_buttons.L = src->input0x82.buttons.L1;
+
+        m_buttons.minus = src->input0x82.buttons.select;
+    }
+
+    void MadCatzController::MapInputReport0x83(const MadCatzReportData *src) {
+        m_left_stick.SetData(
+            std::clamp<u16>(MediaModeStickScaleFactor * -src->input0x83.left_stick.x + 0x7ff, SwitchAnalogStick::Min, SwitchAnalogStick::Max),
+            std::clamp<u16>(MediaModeStickScaleFactor *  src->input0x83.left_stick.y + 0x7ff, SwitchAnalogStick::Min, SwitchAnalogStick::Max)
+        );
+
+        m_buttons.ZR = src->input0x83.buttons.R2;
+        m_buttons.ZL = src->input0x83.buttons.L2;
+
+        m_buttons.lstick_press = src->input0x83.buttons.L3;
+        m_buttons.rstick_press = src->input0x83.buttons.R3;
     }
 
 }

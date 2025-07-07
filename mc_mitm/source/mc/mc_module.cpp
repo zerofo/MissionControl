@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -16,7 +16,7 @@
 #include "mc_module.hpp"
 #include "mc_service.hpp"
 
-namespace ams::mitm::mc {
+namespace ams::mc {
 
     namespace {
 
@@ -27,7 +27,13 @@ namespace ams::mitm::mc {
 
         constexpr sm::ServiceName MissionControlServiceName = sm::ServiceName::Encode("mc");
 
-        using ServerOptions = sf::hipc::DefaultServerManagerOptions;
+        struct ServerOptions {
+            static constexpr size_t PointerBufferSize   = 0x1000;
+            static constexpr size_t MaxDomains          = 0;
+            static constexpr size_t MaxDomainObjects    = 0;
+            static constexpr bool CanDeferInvokeRequest = false;
+            static constexpr bool CanManageMitmServers  = false;
+        };
 
         constexpr size_t MaxSessions = 4;
 
@@ -48,11 +54,11 @@ namespace ams::mitm::mc {
             }
         }
 
-        const s32 ThreadPriority = 20;
-        const size_t ThreadStackSize = 0x1000;
-        alignas(os::ThreadStackAlignment) u8 g_thread_stack[ThreadStackSize];
-        os::ThreadType g_thread;
-        
+        constexpr s32 ThreadPriority = 20;
+        constexpr size_t ThreadStackSize = 0x1000;
+        alignas(os::ThreadStackAlignment) constinit u8 g_thread_stack[ThreadStackSize];
+        constinit os::ThreadType g_thread;
+
         void MissionControlThreadFunction(void *) {
             R_ABORT_UNLESS(g_server_manager.RegisterServer(PortIndex_MissionControl, MissionControlServiceName, MaxSessions));
             g_server_manager.LoopProcess();
@@ -60,19 +66,17 @@ namespace ams::mitm::mc {
 
     }
 
-    Result Launch() {
-        R_TRY(os::CreateThread(&g_thread,
+    void Launch() {
+        R_ABORT_UNLESS(os::CreateThread(&g_thread,
             MissionControlThreadFunction,
             nullptr,
             g_thread_stack,
             ThreadStackSize,
             ThreadPriority
         ));
-        
+
         os::SetThreadNamePointer(&g_thread, "mc::MissionControlThread");
         os::StartThread(&g_thread);
-
-        return ams::ResultSuccess();
     }
 
     void WaitFinished() {

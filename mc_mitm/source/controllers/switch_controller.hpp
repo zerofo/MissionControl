@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,15 +18,17 @@
 #include "../bluetooth_mitm/bluetooth/bluetooth_types.hpp"
 #include "../bluetooth_mitm/bluetooth/bluetooth_hid_report.hpp"
 #include "../async/future_response.hpp"
+#include "switch_rumble_handler.hpp"
+#include "switch_motion_packing.hpp"
 #include <queue>
 
 namespace ams::controller {
 
-    using HidResponse = FutureResponse<bluetooth::HidEventType, bluetooth::HidReportEventInfo, uint8_t>;
+    using HidResponse = FutureResponse<bluetooth::HidEventType, bluetooth::HidReportEventInfo, u8>;
 
     constexpr auto BATTERY_MAX = 8;
 
-    enum SwitchPlayerNumber : uint8_t {
+    enum SwitchPlayerNumber : u8 {
         SwitchPlayerNumber_One,
         SwitchPlayerNumber_Two,
         SwitchPlayerNumber_Three,
@@ -39,103 +41,82 @@ namespace ams::controller {
     };
 
     struct HardwareID {
-        uint16_t vid;
-        uint16_t pid;
+        u16 vid;
+        u16 pid;
     };
 
     struct RGBColour {
-        uint8_t r;
-        uint8_t g;
-        uint8_t b;
-    } __attribute__ ((__packed__));
+        u8 r;
+        u8 g;
+        u8 b;
+    } PACKED;
 
     struct ProControllerColours {
         RGBColour body;
         RGBColour buttons;
         RGBColour left_grip;
         RGBColour right_grip;
-    } __attribute__ ((__packed__));
+    } PACKED;
 
     struct SwitchButtonData {
-        uint8_t Y              : 1;
-        uint8_t X              : 1;
-        uint8_t B              : 1;
-        uint8_t A              : 1;
-        uint8_t                : 2; // SR, SL (Right Joy)
-        uint8_t R              : 1;
-        uint8_t ZR             : 1;
+        u8 Y            : 1;
+        u8 X            : 1;
+        u8 B            : 1;
+        u8 A            : 1;
+        u8              : 2; // SR, SL (Right Joy)
+        u8 R            : 1;
+        u8 ZR           : 1;
 
-        uint8_t minus          : 1;
-        uint8_t plus           : 1;
-        uint8_t rstick_press   : 1;
-        uint8_t lstick_press   : 1;
-        uint8_t home           : 1;
-        uint8_t capture        : 1;
-        uint8_t                : 0;
+        u8 minus        : 1;
+        u8 plus         : 1;
+        u8 rstick_press : 1;
+        u8 lstick_press : 1;
+        u8 home         : 1;
+        u8 capture      : 1;
+        u8              : 0;
 
-        uint8_t dpad_down      : 1;
-        uint8_t dpad_up        : 1;
-        uint8_t dpad_right     : 1;
-        uint8_t dpad_left      : 1;
-        uint8_t                : 2; // SR, SL (Left Joy)
-        uint8_t L              : 1;
-        uint8_t ZL             : 1;
-    } __attribute__ ((__packed__));
-
-    struct Switch6AxisData {
-        int16_t accel_x;
-        int16_t accel_y;
-        int16_t accel_z;
-        int16_t gyro_1;
-        int16_t gyro_2;
-        int16_t gyro_3;
-    } __attribute__ ((__packed__));
+        u8 dpad_down    : 1;
+        u8 dpad_up      : 1;
+        u8 dpad_right   : 1;
+        u8 dpad_left    : 1;
+        u8              : 2; // SR, SL (Left Joy)
+        u8 L            : 1;
+        u8 ZL           : 1;
+    } PACKED;
 
     struct Switch6AxisCalibrationData {
         struct {
-            int16_t x;
-            int16_t y;
-            int16_t z;
+            s16 x;
+            s16 y;
+            s16 z;
         } acc_bias;
 
         struct {
-            int16_t x;
-            int16_t y;
-            int16_t z;
+            s16 x;
+            s16 y;
+            s16 z;
         } acc_sensitivity;
 
         struct {
-            int16_t roll;
-            int16_t pitch;
-            int16_t yaw;
+            s16 roll;
+            s16 pitch;
+            s16 yaw;
         } gyro_bias;
 
         struct {
-            int16_t roll;
-            int16_t pitch;
-            int16_t yaw;
+            s16 roll;
+            s16 pitch;
+            s16 yaw;
         } gyro_sensitivity;
-    } __attribute__((packed));
+    } PACKED;
 
     struct Switch6AxisHorizontalOffset {
-        int16_t x;
-        int16_t y;
-        int16_t z;
-    } __attribute__((packed));
+        s16 x;
+        s16 y;
+        s16 z;
+    } PACKED;
 
-    struct SwitchRumbleDataEncoded {
-        uint8_t left_motor[4];
-        uint8_t right_motor[4];
-    } __attribute__ ((__packed__));
-
-    struct SwitchRumbleData {
-        float high_band_freq;
-        float high_band_amp;
-        float low_band_freq;
-        float low_band_amp;
-    } __attribute__ ((__packed__));
-
-    enum HidCommandType : uint8_t {
+    enum HidCommandType : u8 {
         HidCommand_PairingOut             = 0x01,
         HidCommand_GetDeviceInfo          = 0x02,
         HidCommand_SetDataFormat          = 0x03,
@@ -168,74 +149,134 @@ namespace ams::controller {
         HidCommand_ReadChargeSetting      = 0x52,
     };
 
+    enum McuCommandType : u8 {
+        McuCommand_Invalid = 0x00,
+        McuCommand_StateReport = 0x01,
+        McuCommand_IrData = 0x03,
+        McuCommand_BusyInitializing = 0x0b,
+        McuCommand_IrStatus = 0x13,
+        McuCommand_IrRegisters = 0x1b,
+        McuCommand_ConfigureMcu = 0x21,
+        McuCommand_ConfigureIr= 0x23,
+        McuCommand_NfcState = 0x2a,
+        McuCommand_NfcReadData = 0x3a,
+        McuCommand_EmptyAwaitingCmd = 0xff,
+    };
+
+    enum McuSubCommandType : u8 {
+        McuSubCommand_SetMcuMode = 0x00,
+        McuSubCommand_GetMcuMode = 0x01,
+        McuSubCommand_ReadDeviceMode = 0x02,
+        McuSubCommand_WriteDeviceRegisters = 0x04,
+    };
+
+    enum McuModeType : u8 {
+        McuMode_Suspended = 0,
+        McuMode_Standby = 1,
+        McuMode_Ringcon = 3,
+        McuMode_Nfc = 4,
+        McuMode_Ir = 5,
+        McuMode_Busy = 6,
+    };
+
+    enum SensorSleepType : u8 {
+        SensorSleepType_Inactive          = 0x0,
+        SensorSleepType_Active            = 0x1,
+        SensorSleepType_ActiveDscaleMode1 = 0x2,
+        SensorSleepType_ActiveDscaleMode2 = 0x3,
+        SensorSleepType_ActiveDscaleMode3 = 0x4,
+        SensorSleepType_ActiveDscaleMode4 = 0x5,
+    };
+
+    enum SensorType : u8 {
+        SensorType_LSM6DS3H   = 0x1,
+        SensorType_ICM20600   = 0x3,
+        SensorType_LSM6DS3TRC = 0x4
+    };
+
     struct SwitchHidCommand {
-        uint8_t id;
+        u8 id;
         union {
-            uint8_t data[0x26];
+            u8 data[0x26];
 
             struct {
-                uint8_t id;
+                u8 id;
             } set_data_format;
 
             struct {
-                uint32_t address;
-                uint8_t size;
+                u32 address;
+                u8 size;
             } serial_flash_read;
 
             struct {
-                uint32_t address;
-                uint8_t size;
-                uint8_t data[];
+                u32 address;
+                u8 size;
+                u8 data[];
             } serial_flash_write;
 
             struct {
-                uint32_t address;
+                u32 address;
             } serial_flash_sector_erase;
 
             struct {
                 union {
-                    uint8_t leds;
+                    u8 leds;
 
                     struct {
-                        uint8_t leds_flash : 4;
-                        uint8_t leds_on    : 4;
+                        u8 leds_flash : 4;
+                        u8 leds_on    : 4;
                     };
                 };
             } set_indicator_led;
 
             struct {
-                bool disabled;
+                SensorSleepType mode;
             } sensor_sleep;
 
             struct {
-                uint8_t gyro_sensitivity;
-                uint8_t acc_sensitivity;
-                uint8_t gyro_perf_rate;
-                uint8_t acc_aa_bandwidth;
+                GyroSensitivity gyro_sensitivity;
+                AccelSensitivity accel_sensitivity;
+                u8 gyro_perf_rate;
+                u8 acc_aa_bandwidth;
             } sensor_config;
 
             struct {
                 bool enabled;
             } motor_enable;
+
+            struct {
+                McuCommandType command;
+                union {
+                    u8 raw[0x25];
+                    struct {
+                        u8 pad;
+                        McuModeType mode;
+                    } configure_mcu;
+                } data;
+            } mcu_write;
+            
+            struct {
+                bool enabled;
+            } mcu_resume;
         };
-    } __attribute__ ((__packed__));
+    } PACKED;
 
     struct SwitchHidCommandResponse {
-        uint8_t ack;
-        uint8_t id;
+        u8 ack;
+        u8 id;
         union {
-            uint8_t raw[0x23];
+            u8 raw[0x23];
 
             struct {
                 struct {
-                    uint8_t major;
-                    uint8_t minor;
+                    u8 major;
+                    u8 minor;
                 } fw_ver;
-                uint8_t type;
-                uint8_t _unk0;  // Always 0x02
+                u8 type;
+                u8 _unk0;  // Always 0x02
                 bluetooth::Address address;
-                uint8_t _unk1;  // Always 0x01
-                uint8_t _unk2;  // If 01, colors in SPI are used. Otherwise default ones
+                SensorType sensor_type;
+                u8 format_version;  // If 01, colors in SPI are used. Otherwise default ones
             } __attribute__ ((__packed__)) get_device_info;
 
             struct {
@@ -243,45 +284,76 @@ namespace ams::controller {
             } shipment;
 
             struct {
-                uint32_t address;
-                uint8_t size;
-                uint8_t data[];
+                u32 address;
+                u8 size;
+                u8 data[];
             } serial_flash_read;
 
             struct {
-                uint8_t status;
+                u8 status;
             } serial_flash_write;
 
             struct {
-                uint8_t status;
+                u8 status;
             } serial_flash_sector_erase;
 
             struct {
                 union {
-                    uint8_t leds;
+                    u8 leds;
 
                     struct {
-                        uint8_t leds_flash : 4;
-                        uint8_t leds_on    : 4;
+                        u8 leds_flash : 4;
+                        u8 leds_on    : 4;
                     };
                 };
             } get_indicator_led;
         } data;
-    } __attribute__ ((__packed__));
+    } PACKED;
 
-    struct SwitchNfcIrResponse {
-        uint8_t data[0x138];
-    } __attribute__ ((__packed__));
+    struct SwitchMcuCommand {
+        McuSubCommandType sub_command;
+        union {
+            u8 raw[0x26];
+
+            struct {
+                McuModeType mode;
+            } set_mcu_mode;
+        } data;
+    } PACKED;
+
+    struct SwitchMcuResponse {
+        McuCommandType command;
+        union {
+            u8 raw[0x137];
+
+            struct {
+                u8 pad[3];
+                u8 unknown_1;
+                u8 pad2;
+                u8 unknown_2;
+                McuModeType mode;
+            } get_mcu_mode;
+            
+            struct {
+                u8 pad;
+                u8 unknown_1;
+                u8 pad2[2];
+                u8 unknown_2;
+                u8 unknown_3;
+                u8 is_ready;
+            } read_device_mode;
+        } data;
+    } PACKED;
 
     struct SwitchInputReport {
-        uint8_t id;
-        uint8_t timer;
-        uint8_t conn_info : 4;
-        uint8_t battery   : 4;
+        u8 id;
+        u8 timer;
+        u8 conn_info : 4;
+        u8 battery   : 4;
         SwitchButtonData buttons;
         SwitchAnalogStick left_stick;
         SwitchAnalogStick right_stick;
-        uint8_t vibrator;
+        u8 vibrator;
 
         union {
             struct {
@@ -289,25 +361,25 @@ namespace ams::controller {
             } type0x21;
 
             struct {
-                uint8_t mcu_fw_data[37];
+                u8 mcu_fw_data[37];
             } type0x23;
 
             struct {
-                Switch6AxisData motion_data[3]; // IMU samples at 0, 5 and 10ms
+                SwitchMotionData motion_data; // IMU samples at 0, 5 and 10ms
             } type0x30;
 
             struct {
-                Switch6AxisData motion_data[3]; // IMU samples at 0, 5 and 10ms
-                SwitchNfcIrResponse nfc_ir_response;
-                uint8_t crc;
+                SwitchMotionData motion_data; // IMU samples at 0, 5 and 10ms
+                SwitchMcuResponse mcu_response;
+                u8 crc;
             } type0x31;
         };
-    } __attribute__ ((__packed__));
+    } PACKED;
 
     struct SwitchOutputReport {
-        uint8_t id;
-        uint8_t counter;
-        SwitchRumbleDataEncoded rumble_data;
+        u8 id;
+        u8 counter;
+        SwitchEncodedMotorData enc_motor_data;
 
         union {
             struct{
@@ -315,12 +387,12 @@ namespace ams::controller {
             } type0x01;
 
             struct {
-                uint8_t nfc_ir_data[0x16];
+                SwitchMcuCommand mcu_command;
             } type0x11;
         };
-    } __attribute__ ((__packed__));
+    } PACKED;
 
-    Result LedsMaskToPlayerNumber(uint8_t led_mask, uint8_t *player_number);
+    Result LedsMaskToPlayerNumber(u8 led_mask, u8 *player_number);
 
     std::string GetControllerDirectory(const bluetooth::Address *address);
 
@@ -338,17 +410,13 @@ namespace ams::controller {
 
             SwitchController(const bluetooth::Address *address, HardwareID id)
             : m_address(*address)
-            , m_id(id)
-            , m_settsi_supported(true)
-            , m_input_mutex(false)
-            , m_output_mutex(false) { }
+            , m_id(id) { }
 
             virtual ~SwitchController() { };
 
             const bluetooth::Address& Address() const { return m_address; }
 
             virtual bool IsOfficialController() { return true; }
-            virtual bool SupportsSetTsiCommand() { return m_settsi_supported; }
 
             virtual Result Initialize();
 
@@ -356,14 +424,12 @@ namespace ams::controller {
             virtual Result HandleSetReportEvent(const bluetooth::HidReportEventInfo *event_info);
             virtual Result HandleGetReportEvent(const bluetooth::HidReportEventInfo *event_info);
             virtual Result HandleOutputDataReport(const bluetooth::HidReport *report);
-        private:
-            bool HasSetTsiDisableFlag();
 
         protected:
             Result WriteDataReport(const bluetooth::HidReport *report);
-            Result WriteDataReport(const bluetooth::HidReport *report, uint8_t response_id, bluetooth::HidReport *out_report);
-            Result SetFeatureReport(const bluetooth::HidReport *report);
-            Result GetFeatureReport(uint8_t id, bluetooth::HidReport *out_report);
+            Result WriteDataReport(const bluetooth::HidReport *report, u8 response_id, bluetooth::HidReport *out_report);
+            Result SetReport(BtdrvBluetoothHhReportType type, const bluetooth::HidReport *report);
+            Result GetReport(u8 id, BtdrvBluetoothHhReportType type, bluetooth::HidReport *out_report);
 
             virtual void UpdateControllerState(const bluetooth::HidReport *report);
             virtual void ApplyButtonCombos(SwitchButtonData *buttons);
@@ -371,12 +437,10 @@ namespace ams::controller {
             bluetooth::Address m_address;
             HardwareID m_id;
 
-            bool m_settsi_supported;
-
-            os::Mutex m_input_mutex;
+            os::SdkMutex m_input_mutex;
             bluetooth::HidReport m_input_report;
 
-            os::Mutex m_output_mutex;
+            os::SdkMutex m_output_mutex;
             bluetooth::HidReport m_output_report;
 
             std::queue<std::shared_ptr<HidResponse>> m_future_responses;

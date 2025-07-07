@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,6 +17,7 @@
 #include <stratosphere.hpp>
 #include "mcmitm_initialization.hpp"
 #include "mcmitm_config.hpp"
+#include "mcmitm_process_monitor.hpp"
 
 namespace ams {
 
@@ -46,6 +47,10 @@ namespace ams {
                 return lmem::AllocateFromExpHeap(GetHeapHandle(), size);
             }
 
+            void *AllocateWithAlign(size_t size, size_t align) {
+                return lmem::AllocateFromExpHeap(GetHeapHandle(), size, align);
+            }
+
             void Deallocate(void *p, size_t size) {
                 AMS_UNUSED(size);
                 return lmem::FreeToExpHeap(GetHeapHandle(), p);
@@ -66,27 +71,87 @@ namespace ams {
 
             R_ABORT_UNLESS(pmdmntInitialize());
             R_ABORT_UNLESS(pminfoInitialize());
+            R_ABORT_UNLESS(pscmInitialize());
+            R_ABORT_UNLESS(usbHsInitialize());
 
             R_ABORT_UNLESS(fs::MountSdCard("sdmc"));
         }
 
         void FinalizeSystemModule() { /* ... */ }
 
-        void Startup() { /* ... */ }
+        void Startup() {
+            // Load module configuration from ini file
+            mitm::LoadConfiguration();
+        }
 
     }
 
     void Main() {
-        // Initialise module configuration
-        mitm::InitializeConfig();
-
-        // Start initialisation thread
-        mitm::StartInitialize();
-
-        // Launch mitm modules
+        // Launch mitm and other modules
         mitm::LaunchModules();
 
-        // Wait for mitm modules to terminate
+        // Initialise pm module
+        psc::PmModuleId pm_module_id = static_cast<psc::PmModuleId>(0xBD);
+        const psc::PmModuleId pm_dependencies[] = { psc::PmModuleId_Fs };
+        psc::PmModule pm_module;
+        psc::PmState pm_state;
+        psc::PmFlagSet pm_flags;
+        R_ABORT_UNLESS(pm_module.Initialize(pm_module_id, pm_dependencies, util::size(pm_dependencies), os::EventClearMode_ManualClear));
+
+        // Create timer event for periodically checking whether the current running application has changed
+        os::TimerEvent timer_event(os::EventClearMode_ManualClear);
+        timer_event.StartPeriodic(ams::TimeSpan::FromSeconds(1), ams::TimeSpan::FromSeconds(1));
+
+        os::MultiWaitType wait_manager;
+        os::MultiWaitHolderType holder_pm_module;
+        os::MultiWaitHolderType holder_proc_monitor;
+
+        os::InitializeMultiWait(&wait_manager);
+
+        os::InitializeMultiWaitHolder(&holder_pm_module, pm_module.GetEventPointer()->GetBase());
+        os::SetMultiWaitHolderUserData(&holder_pm_module, 0);
+        os::LinkMultiWaitHolder(&wait_manager, &holder_pm_module);
+
+        os::InitializeMultiWaitHolder(&holder_proc_monitor, timer_event.GetBase());
+        os::SetMultiWaitHolderUserData(&holder_proc_monitor, 1);
+        os::LinkMultiWaitHolder(&wait_manager, &holder_proc_monitor);
+
+        // Loop events until shutdown signal is received
+        bool shutdown = false;
+        while (!shutdown) {
+            auto signalled_holder = os::WaitAny(&wait_manager);
+            switch (os::GetMultiWaitHolderUserData(signalled_holder)) {
+                case 0:
+                    pm_module.GetEventPointer()->Clear();
+                    if (R_SUCCEEDED(pm_module.GetRequest(&pm_state, &pm_flags))) {
+                        switch (pm_state) {
+                            case psc::PmState_ShutdownReady:
+                                shutdown = true;
+                                [[fallthrough]];
+                            case psc::PmState_SleepReady:
+                                /* Run sleep/shutdown code */
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+
+                    R_ABORT_UNLESS(pm_module.Acknowledge(pm_state, ResultSuccess()));
+                    break;
+
+                case 1:
+                    timer_event.Clear();
+                    mc::CheckForProcessSwitch();
+                    break;
+
+                AMS_UNREACHABLE_DEFAULT_CASE();
+            }
+        }
+
+        // Stop the timer
+        timer_event.Stop();
+
+        // Wait for modules to terminate
         mitm::WaitModules();
     }
 
@@ -122,4 +187,13 @@ void operator delete[](void *p) {
 
 void operator delete[](void *p, size_t size) {
     return ams::mitm::Deallocate(p, size);
+}
+
+void *operator new(size_t size, std::align_val_t align) {
+    return ams::mitm::AllocateWithAlign(size, static_cast<size_t>(align));
+}
+
+void operator delete(void *p, std::align_val_t align) {
+    AMS_UNUSED(align);
+    return ams::mitm::Deallocate(p, 0);
 }

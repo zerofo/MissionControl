@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,7 +18,12 @@
 
 namespace ams::controller {
 
-    uint8_t convert_battery_100(uint8_t level);
-    uint8_t convert_battery_255(uint8_t level);
-    
+    constexpr u8 convert_battery_100(u8 level) {
+        return level ? (((level - 1) / 25) + 1) << 1 : 0;
+    }
+
+    constexpr u8 convert_battery_255(u8 level) {
+        return level ? ((level / 64) + 1) << 1 : 0;
+    }
+
 }

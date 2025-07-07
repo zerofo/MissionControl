@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -29,14 +29,17 @@ namespace ams::mitm {
         } bluetooth;
 
         struct {
-            bool enable_dualshock4_lightbar;
-            bool enable_dualsense_lightbar;
-            bool enable_dualsense_player_leds;
+            int analog_trigger_activation_threshold;
+            int dualshock3_led_mode;
+            int dualshock4_polling_rate;
+            int dualshock4_lightbar_brightness;
+            int dualsense_lightbar_brightness;
+            bool dualsense_enable_player_leds;
             int dualsense_vibration_intensity;
         } misc;
     };
 
-    void InitializeConfig();
+    void LoadConfiguration();
     MissionControlConfig *GetGlobalConfig();
     SetLanguage GetSystemLanguage();
 

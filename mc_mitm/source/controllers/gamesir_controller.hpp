@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 ndeadly
+ * Copyright (c) 2020-2025 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -42,69 +42,64 @@ namespace ams::controller {
         GamesirDpad2_Released = 0x0f,
     };
 
-    struct GamesirStickData {
-        uint8_t x;
-        uint8_t y;
-    } __attribute__((packed));
-
     struct GamesirButtonData {
-        uint8_t A       : 1;
-        uint8_t B       : 1;
-        uint8_t         : 1;
-        uint8_t X       : 1;
-        uint8_t Y       : 1;
-        uint8_t         : 1;
-        uint8_t LB      : 1;
-        uint8_t RB      : 1;
+        u8 A      : 1;
+        u8 B      : 1;
+        u8        : 1;
+        u8 X      : 1;
+        u8 Y      : 1;
+        u8        : 1;
+        u8 LB     : 1;
+        u8 RB     : 1;
 
-        uint8_t LT      : 1;
-        uint8_t RT      : 1;
-        uint8_t select  : 1;
-        uint8_t start   : 1;
-        uint8_t home    : 1;  // Only present in report 0x03
-        uint8_t L3      : 1;
-        uint8_t R3      : 1;
-        uint8_t         : 0;
+        u8 LT     : 1;
+        u8 RT     : 1;
+        u8 select : 1;
+        u8 start  : 1;
+        u8 home   : 1;  // Only present in report 0x03
+        u8 L3     : 1;
+        u8 R3     : 1;
+        u8        : 0;
 
-        uint8_t dpad;
-    } __attribute__((packed));
+        u8 dpad;
+    } PACKED;
 
     struct GamesirReport0x03 {
         GamesirButtonData buttons;
-        GamesirStickData left_stick;
-        GamesirStickData right_stick;
-        uint8_t left_trigger;
-        uint8_t right_trigger;
-        uint8_t _unk[2];
-    } __attribute__((packed));
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick;
+        u8 left_trigger;
+        u8 right_trigger;
+        u8 _unk[2];
+    } PACKED;
 
     struct GamesirReport0x12 {
-        uint8_t         : 3;
-        uint8_t home    : 1;
-        uint8_t         : 0;
+        u8      : 3;
+        u8 home : 1;
+        u8      : 0;
 
-        uint8_t _unk[2];
-    } __attribute__((packed));
+        u8 _unk[2];
+    } PACKED;
 
     struct GamesirReport0xc4 {
-        GamesirStickData left_stick;
-        GamesirStickData right_stick;
-        uint8_t left_trigger;
-        uint8_t right_trigger;
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick;
+        u8 left_trigger;
+        u8 right_trigger;
         GamesirButtonData buttons;
-        uint8_t _unk;
-    } __attribute__((packed));
+        u8 _unk;
+    } PACKED;
 
     struct GamesirReportData {
-        uint8_t id;
+        u8 id;
         union {
             GamesirReport0x03 input0x03;
             GamesirReport0x12 input0x12;
             GamesirReport0xc4 input0xc4;
         };
-    } __attribute__((packed));
+    } PACKED;
 
-    class GamesirController : public EmulatedSwitchController {
+    class GamesirController final : public EmulatedSwitchController {
 
         public:
             static constexpr const HardwareID hardware_ids[] = {
@@ -113,12 +108,10 @@ namespace ams::controller {
                 {0xffff, 0x046f},   // Gamesir G4s
                 {0xffff, 0x0450},   // Gamesir T1s
                 {0x05ac, 0x056b}    // Gamesir T2a
-            };  
+            };
 
             GamesirController(const bluetooth::Address *address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
-
-            bool SupportsSetTsiCommand() { return false; }
 
             void ProcessInputData(const bluetooth::HidReport *report) override;
 
