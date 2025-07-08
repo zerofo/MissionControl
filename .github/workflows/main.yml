@@ -22,7 +22,7 @@ jobs:
       run: |
           git config --global --add safe.directory `pwd` && \
           git submodule update --remote && make dist -j2
-
+          ls ./dist/MissionControl--develop-*.zip|xargs -I {} mv {} ./dist/MissionControl--develop.zip
           
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
