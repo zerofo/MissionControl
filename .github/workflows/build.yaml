@@ -1,0 +1,41 @@
+---
+name: ci
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64
+
+    steps:
+    - name: Checkout project
+      uses: actions/checkout@master
+      with:
+        submodules: recursive
+
+    - name: Build project
+      run: |
+          git config --global --add safe.directory `pwd` && \
+          git submodule update --remote && make dist -j2
+          ls ./dist/MissionControl--*-*.zip|xargs -I {} mv {} ./dist/MissionControl.zip
+          
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        path: ./dist/*.zip
+        
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.release_token }}
+        file: ./dist/*.zip
+        tag: ${{ github.ref }}
+        overwrite: true
+        file_glob: true
+        make_latest: true 
+        release_name: ${{ github.event.repository.updated_at }}
