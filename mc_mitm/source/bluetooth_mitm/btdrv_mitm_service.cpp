@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -86,30 +86,24 @@ namespace ams::mitm::bluetooth {
 
     Result BtdrvMitmService::WriteHidData(ams::bluetooth::Address address, const sf::InPointerBuffer &buffer) {
         auto report = reinterpret_cast<const ams::bluetooth::HidReport *>(buffer.GetPointer());
-        if (m_client_info.program_id == ncm::SystemProgramId::Hid) {
-            auto device = controller::LocateHandler(&address);
-            if (device) {
-                device->HandleOutputDataReport(report);
-            }
+
+        if (auto device = controller::LocateHandler(address)) {
+            R_TRY(device->HandleOutputDataReport(report->data, report->size));
         } else {
-            R_TRY(btdrvWriteHidDataFwd(m_forward_service.get(), &address, report));
+            R_TRY(btdrvWriteHidDataFwd(m_forward_service.get(), address, report));
         }
 
         R_SUCCEED();
     }
 
     Result BtdrvMitmService::WriteHidData2(ams::bluetooth::Address address, const sf::InPointerBuffer &buffer) {
-        if (m_client_info.program_id == ncm::SystemProgramId::Hid) {
-            auto device = controller::LocateHandler(&address);
-            if (device) {
-                device->HandleOutputDataReport(reinterpret_cast<const ams::bluetooth::HidReport *>(buffer.GetPointer()));
-            }
-        }
-        else {
-            R_TRY(btdrvWriteHidData2Fwd(m_forward_service.get(), &address, buffer.GetPointer(), buffer.GetSize()));
+        if (auto device = controller::LocateHandler(address)) {
+            R_TRY(device->HandleOutputDataReport(buffer.GetPointer(), buffer.GetSize()));
+        } else {
+            R_TRY(btdrvWriteHidData2Fwd(m_forward_service.get(), address, buffer.GetPointer(), buffer.GetSize()));
         }
 
-        return ams::ResultSuccess();
+        R_SUCCEED();
     }
 
     Result BtdrvMitmService::GetHidEventInfo(sf::Out<ams::bluetooth::HidEventType> out_type, const sf::OutPointerBuffer &out_buffer) {

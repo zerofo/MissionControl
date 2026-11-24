@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,18 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum AtariDPadDirection {
-        AtariDPad_Released,
-        AtariDPad_N,
-        AtariDPad_NE,
-        AtariDPad_E,
-        AtariDPad_SE,
-        AtariDPad_S,
-        AtariDPad_SW,
-        AtariDPad_W,
-        AtariDPad_NW,
-    };
 
     struct AtariButtonData {
         u8 A    : 1;
@@ -51,8 +39,8 @@ namespace ams::controller {
         AtariButtonData buttons;
         AnalogStick<s16> left_stick;
         AnalogStick<s16> right_stick;
-        u16 left_trigger;
-        u16 right_trigger;
+        AnalogTriggerType<u16, 0x3FF> left_trigger;
+        AnalogTriggerType<u16, 0x3FF> right_trigger;
     } PACKED;
 
     struct AtariInputReport0x02 {
@@ -74,10 +62,9 @@ namespace ams::controller {
                 {0x3250, 0x1002}    // Atari VCS Wireless Modern Controller
             };
 
-            AtariController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            AtariController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const AtariReportData *src);

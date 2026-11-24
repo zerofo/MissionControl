@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,20 +17,30 @@
 
 namespace ams::utils {
 
-    bool BluetoothAddressCompare(const bluetooth::Address *addr1, const bluetooth::Address *addr2) {
-        return std::memcmp(addr1, addr2, sizeof(bluetooth::Address)) == 0;
+    bool BluetoothAddressCompare(bluetooth::Address addr1, bluetooth::Address addr2) {
+        return std::memcmp(&addr1, &addr2, sizeof(bluetooth::Address)) == 0;
     }
 
-    Result BluetoothAddressToString(const bluetooth::Address *address, char *out, size_t out_size) {
+    bluetooth::Address BluetoothAddressReverse(bluetooth::Address address) {
+        u64 tmp = 0;
+        std::memcpy(&tmp, &address, sizeof(address));
+        tmp = util::SwapEndian(tmp) >> 16;
+
+        bluetooth::Address out;
+        std::memcpy(&out, &tmp, sizeof(address));
+        return out;
+    }
+
+    Result BluetoothAddressToString(bluetooth::Address address, char *out, size_t out_size) {
         if (out_size < 2*sizeof(bluetooth::Address) + 1) {
             return -1;
         }
 
         char ch;
         for (u32 i = 0; i < sizeof(bluetooth::Address); ++i) {
-            ch = address->address[i] >> 4;
+            ch = address.address[i] >> 4;
             *out++ = ch + (ch <= 9 ? '0' : 'a' - 0xa);
-            ch = address->address[i] & 0x0f;
+            ch = address.address[i] & 0x0f;
             *out++ = ch + (ch <= 9 ? '0' : 'a' - 0xa);
         }
         *out = '\0';

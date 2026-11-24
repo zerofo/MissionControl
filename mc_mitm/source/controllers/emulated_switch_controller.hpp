@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -15,85 +15,76 @@
  */
 #pragma once
 #include "switch_controller.hpp"
-#include "virtual_spi_flash.hpp"
+#include "switch_device_info.hpp"
+#include "switch_sixaxis_processor.hpp"
+#include "switch_vibration_processor.hpp"
+#include "switch_hid_command_processor.hpp"
+#include "switch_mcu_command_processor.hpp"
+#include "switch_ext_grip_command_processor.hpp"
+#include "switch_virtual_controller_memory.hpp"
 
 namespace ams::controller {
 
     class EmulatedSwitchController : public SwitchController {
+        friend class SwitchVibrationProcessor;
+        friend class SwitchHidCommandProcessor;
+        friend class SwitchMcuCommandProcessor;
+        friend class SwitchExtGripCommandProcessor;
 
         public:
-            EmulatedSwitchController(const bluetooth::Address *address, HardwareID id);
-            virtual ~EmulatedSwitchController() {};
+            EmulatedSwitchController(bluetooth::Address address, HardwareID id);
+            virtual ~EmulatedSwitchController() { };
 
-            virtual Result Initialize();
-            bool IsOfficialController() { return false; }
+        public:
+            virtual Result Initialize() override;
+            virtual constexpr bool IsOfficialController() const override { return false; }
 
-            Result HandleOutputDataReport(const bluetooth::HidReport *report) override;
+            virtual Result HandleOutputDataReport(const u8 *report_buffer, size_t size) override;
+            virtual Result InjectInputReport(const u8 *report_buffer, size_t size);
 
         protected:
-            void ClearControllerState();
+            void Reset();
             virtual Result SetVibration(const SwitchMotorData *motor_data) { AMS_UNUSED(motor_data); R_SUCCEED(); }
             virtual Result CancelVibration() { R_SUCCEED(); }
-            virtual Result SetPlayerLed(u8 led_mask) { AMS_UNUSED(led_mask); R_SUCCEED(); }
+            virtual Result SetPlayerLed(SwitchPlayerNumber player_number) { AMS_UNUSED(player_number); R_SUCCEED(); }
 
-            void UpdateControllerState(const bluetooth::HidReport *report) override;
-            virtual void ProcessInputData(const bluetooth::HidReport *report) { AMS_UNUSED(report); }
+            virtual size_t FillInputReport(u8 *report_buffer, size_t size) override;
 
-            Result HandleRumbleData(const SwitchEncodedMotorData *enc_motor_data);
-            Result HandleHidCommand(const SwitchHidCommand *command);
-            Result HandleMcuCommand(const SwitchMcuCommand *command);
+            size_t FillCommandInputReport(u8 *report_buffer, size_t size);
+            size_t FillMcuUpdateInputReport(u8 *report_buffer, size_t size);
+            size_t FillBasicInputReport(u8 *report_buffer, size_t size);
+            size_t FillMcuInputReport(u8 *report_buffer, size_t size);
+            size_t FillAttachmentInputReport(u8 *report_buffer, size_t size);
+            size_t FillGenericInputReport(u8 *report_buffer, size_t size);
+            size_t FillExtGripInputReport(u8 *report_buffer, size_t size);
 
-            Result HandleHidCommandGetDeviceInfo(const SwitchHidCommand *command);
-            Result HandleHidCommandSetDataFormat(const SwitchHidCommand *command);
-            Result HandleHidCommandLRButtonDetection(const SwitchHidCommand *command);
-            Result HandleHidCommandClearPairingInfo(const SwitchHidCommand *command);
-            Result HandleHidCommandShipment(const SwitchHidCommand *command);
-            Result HandleHidCommandSerialFlashRead(const SwitchHidCommand *command);
-            Result HandleHidCommandSerialFlashWrite(const SwitchHidCommand *command);
-            Result HandleHidCommandSerialFlashSectorErase(const SwitchHidCommand *command);
-            Result HandleHidCommandMcuWrite(const SwitchHidCommand *command);
-            Result HandleHidCommandConfigureMcu(const SwitchHidCommand *command);
-            Result HandleHidCommandMcuResume(const SwitchHidCommand *command);
-            Result HandleHidCommandMcuPollingEnable(const SwitchHidCommand *command);
-            Result HandleHidCommandMcuPollingDisable(const SwitchHidCommand *command);
-            Result HandleHidCommandSetIndicatorLed(const SwitchHidCommand *command);
-            Result HandleHidCommandGetIndicatorLed(const SwitchHidCommand *command);
-            Result HandleHidCommandSetNotificationLed(const SwitchHidCommand *command);
-            Result HandleHidCommandSensorSleep(const SwitchHidCommand *command);
-            Result HandleHidCommandSensorConfig(const SwitchHidCommand *command);
-            Result HandleHidCommandMotorEnable(const SwitchHidCommand *command);
+            Result HandleCommandOutputReport(const u8 *report_buffer, size_t size);
+            Result HandleMcuUpdateOutputReport(const u8 *report_buffer, size_t size);
+            Result HandleBasicOutputReport(const u8 *report_buffer, size_t size);
+            Result HandleMcuOutputReport(const u8 *report_buffer, size_t size);
+            Result HandleAttachmentOutputReport(const u8 *report_buffer, size_t size);
+            Result HandleExtGripOutputReport(const u8 *report_buffer, size_t size);
 
-            Result HandleMcuCommandSetMcuMode();
-            Result HandleMcuCommandGetMcuMode();
-            Result HandleMcuCommandReadDeviceMode();
+        protected:
+            SwitchDeviceInfo m_device_info;
 
-            Result FakeHidCommandResponse(const SwitchHidCommandResponse *response);
-            Result FakeMcuResponse(const SwitchMcuResponse *response);
-
-            bool m_charging;
-            bool m_ext_power;
-            u8 m_battery;
-            u8 m_led_pattern;
-
-            SwitchButtonData m_buttons;
-            SwitchAnalogStick m_left_stick;
-            SwitchAnalogStick m_right_stick;
-            Vec3d<float> m_accel;
-            Vec3d<float> m_gyro;
-
-            u8 m_input_report_mode;
-
-            SwitchRumbleHandler m_rumble_handler;
-            std::unique_ptr<SwitchMotionPacker> m_motion_packer = std::make_unique<NullMotionPacker>();
-
-            bool m_enable_rumble;
-            bool m_enable_motion;
+            u8 m_latency_timer;
+            SwitchPowerInfo m_power_info;
+            SwitchPlayerIndicator m_player_indicator;
+            SwitchMotorStatus m_motor_status;
+            SwitchHidReportId m_input_report_mode;
 
             float m_trigger_threshold;
 
-            McuModeType m_mcu_mode;
+            bool m_enable_motion;
+            SwitchSixAxisProcessor m_sixaxis_processor;
 
-            VirtualSpiFlash m_virtual_memory;
+            SwitchVibrationProcessor m_vibration_processor;
+            SwitchHidCommandProcessor m_hid_command_processor;
+            SwitchMcuCommandProcessor m_mcu_command_processor;
+            SwitchExtGripCommandProcessor m_ext_grip_command_processor;
+
+            SwitchVirtualControllerMemory m_virtual_memory;
     };
 
 }

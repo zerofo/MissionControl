@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,30 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum GamesirDpadDirection {
-        GamesirDpad_Released,
-        GamesirDpad_N,
-        GamesirDpad_NE,
-        GamesirDpad_E,
-        GamesirDpad_SE,
-        GamesirDpad_S,
-        GamesirDpad_SW,
-        GamesirDpad_W,
-        GamesirDpad_NW,
-    };
-
-    enum GamesirDpadDirection2 {
-        GamesirDpad2_N,
-        GamesirDpad2_NE,
-        GamesirDpad2_E,
-        GamesirDpad2_SE,
-        GamesirDpad2_S,
-        GamesirDpad2_SW,
-        GamesirDpad2_W,
-        GamesirDpad2_NW,
-        GamesirDpad2_Released = 0x0f,
-    };
 
     struct GamesirButtonData {
         u8 A      : 1;
@@ -60,16 +36,25 @@ namespace ams::controller {
         u8 L3     : 1;
         u8 R3     : 1;
         u8        : 0;
-
-        u8 dpad;
     } PACKED;
 
     struct GamesirReport0x03 {
         GamesirButtonData buttons;
+        DirectionalPadType<0, 0xF> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
+        u8 _unk[2];
+    } PACKED;
+
+    struct GamesirReport0x07 {
+        AnalogStick<u8> left_stick;
+        AnalogStick<u8> right_stick;
+        DirectionalPadType<0, 0xF> dpad;
+        GamesirButtonData buttons;
+        AnalogTriggerType<u8> right_trigger;
+        AnalogTriggerType<u8> left_trigger;
         u8 _unk[2];
     } PACKED;
 
@@ -81,12 +66,13 @@ namespace ams::controller {
         u8 _unk[2];
     } PACKED;
 
-    struct GamesirReport0xc4 {
+    struct GamesirReport0xC4 {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         GamesirButtonData buttons;
+        DirectionalPadType<1, 0> dpad;
         u8 _unk;
     } PACKED;
 
@@ -94,8 +80,9 @@ namespace ams::controller {
         u8 id;
         union {
             GamesirReport0x03 input0x03;
+            GamesirReport0x07 input0x07;
             GamesirReport0x12 input0x12;
-            GamesirReport0xc4 input0xc4;
+            GamesirReport0xC4 input0xC4;
         };
     } PACKED;
 
@@ -106,19 +93,20 @@ namespace ams::controller {
                 {0xffff, 0x046e},   // Gamesir G3s
                 {0x05ac, 0x022d},   // Gamesir G3s (Alternate mode. Lol, this is actually the ID of an Apple wireless keyboard)
                 {0xffff, 0x046f},   // Gamesir G4s
+                {0x3537, 0x1022},   // Gamesir G7 Pro
                 {0xffff, 0x0450},   // Gamesir T1s
                 {0x05ac, 0x056b}    // Gamesir T2a
             };
 
-            GamesirController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            GamesirController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x03(const GamesirReportData *src);
+            void MapInputReport0x07(const GamesirReportData *src);
             void MapInputReport0x12(const GamesirReportData *src);
-            void MapInputReport0xc4(const GamesirReportData *src);
+            void MapInputReport0xC4(const GamesirReportData *src);
 
     };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -15,25 +15,90 @@
  */
 #pragma once
 #include <stratosphere.hpp>
+#include "../utils.hpp"
 
 namespace ams::controller {
 
-    template <typename T>
-    struct Vec3d {
-        T x;
-        T y;
-        T z;
+    enum class SwitchImuSensorSleepMode : u8 {
+        Inactive          = 0x00,
+        Active            = 0x01,
+        ActiveDscaleMode1 = 0x02,
+        ActiveDscaleMode2 = 0x03,
+        ActiveDscaleMode3 = 0x04,
+        ActiveDscaleMode4 = 0x05,
+    };
+
+    enum class SwitchImuSensorType : u8 {
+        LSM6DS3H   = 0x01,
+        ICM20600   = 0x03,
+        LSM6DS3TRC = 0x04,
+    };
+
+    enum GyroSensitivity : u8 {
+        GyroSensitivity_250Dps  = 0,
+        GyroSensitivity_500Dps  = 1,
+        GyroSensitivity_1000Dps = 2,
+        GyroSensitivity_2000Dps = 3,
+    };
+
+    enum GyroPerformanceRate : u8 {
+        GyroPerformanceRate_833Hz = 0,
+        GyroPerformanceRate_208Hz = 1,
+    };
+
+    enum AccelSensitivity : u8 {
+        AccelSensitivity_8G  = 0,
+        AccelSensitivity_4G  = 1,
+        AccelSensitivity_2G  = 2,
+        AccelSensitivity_16G = 3,
+    };
+
+    enum AccelAntiAliasFilterBandwidth : u8 {
+        AccelAntiAliasFilterBandwidth_200Hz = 0,
+        AccelAntiAliasFilterBandwidth_100Hz = 1,
+    };
+
+    struct Switch6AxisCalibrationData {
+        struct {
+            s16 x;
+            s16 y;
+            s16 z;
+        } acc_bias;
+
+        struct {
+            s16 x;
+            s16 y;
+            s16 z;
+        } acc_sensitivity;
+
+        struct {
+            s16 roll;
+            s16 pitch;
+            s16 yaw;
+        } gyro_bias;
+
+        struct {
+            s16 roll;
+            s16 pitch;
+            s16 yaw;
+        } gyro_sensitivity;
+    } PACKED;
+
+    struct Switch6AxisHorizontalOffset {
+        s16 x;
+        s16 y;
+        s16 z;
     } PACKED;
 
     struct SwitchMotionData {
         union {
             struct {
-                Vec3d<s16> accel_0;
-                Vec3d<s16> gyro_0;
-                Vec3d<s16> accel_1;
-                Vec3d<s16> gyro_1;
-                Vec3d<s16> accel_2;
-                Vec3d<s16> gyro_2;
+                utils::Vec3d<s16> accel_0;
+                utils::Vec3d<s16> gyro_0;
+                utils::Vec3d<s16> accel_1;
+                utils::Vec3d<s16> gyro_1;
+                utils::Vec3d<s16> accel_2;
+                utils::Vec3d<s16> gyro_2;
             } standard;
 
             // first_sample, mid_sample and last_sample are the three states of the quaternion with a delta of 5ms between eachother 
@@ -45,8 +110,8 @@ namespace ams::controller {
 
             union {
                 struct {
-                    Vec3d<s16> accel_0;
-                    u32 packing_mode      : 2;
+                    utils::Vec3d<s16> accel_0;
+                    u32 mode              : 2;
                     u32 max_index_first   : 2;
                     u32 first_sample_0    : 13;
                     u32 first_sample_1    : 13;
@@ -54,14 +119,14 @@ namespace ams::controller {
                     u16 first_sample_2h   : 11;
                     u16 max_index_mid     : 2;
                     u16 mid_sample_0l     : 3;
-                    Vec3d<s16> accel_1;
+                    utils::Vec3d<s16> accel_1;
                     u32 mid_sample_0h     : 10;
                     u32 mid_sample_1      : 13;
                     u32 mid_sample_2l     : 9;
                     u16 mid_sample_2h     : 4;
                     u16 max_index_last    : 2;
                     u16 last_sample_0l    : 10;
-                    Vec3d<s16> accel_2;
+                    utils::Vec3d<s16> accel_2;
                     u32 last_sample_0h    : 3;
                     u32 last_sample_1     : 13;
                     u32 last_sample_2     : 13;
@@ -69,24 +134,24 @@ namespace ams::controller {
                     u16 timestamp_start_h : 8;
                     u16 timestamp_count   : 6;
                     u16 : 2;
-                } PACKED packing_mode_0;
+                } PACKED mode0;
 
                 struct {
-                    Vec3d<s16> accel_0;
-                    u32 packing_mode       : 2;
+                    utils::Vec3d<s16> accel_0;
+                    u32 mode               : 2;
                     u32 delta_mid_avg_div4 : 1;
                     u32 max_index          : 2;
                     u32 first_sample_0     : 16;
                     u32 first_sample_1l    : 11;
                     u16 first_sample_1h    : 5;
                     u16 first_sample_2l    : 11;
-                    Vec3d<s16> accel_1;
+                    utils::Vec3d<s16> accel_1;
                     u32 first_sample_2h    : 5;
                     u32 last_sample_0      : 16;
                     u32 last_sample_1l     : 11;
                     u16 last_sample_1h     : 5;
                     u16 last_sample_2l     : 11;
-                    Vec3d<s16> accel_2;
+                    utils::Vec3d<s16> accel_2;
                     u32 last_sample_2h     : 5;
                     u32 delta_mid_avg_0    : 8;
                     u32 delta_mid_avg_1    : 8;
@@ -95,22 +160,22 @@ namespace ams::controller {
                     u16 timestamp_start_h  : 8;
                     u16 timestamp_count    : 6;
                     u16 : 2;
-                } PACKED packing_mode_1;
+                } PACKED mode1;
 
                 struct {
-                    Vec3d<s16> accel_0;
-                    u32 packing_mode        : 2;
+                    utils::Vec3d<s16> accel_0;
+                    u32 mode                : 2;
                     u32 max_index           : 2;
                     u32 last_sample_0       : 21;
                     u32 last_sample_1l      : 7;
                     u16 last_sample_1h      : 14;
                     u16 last_sample_2l      : 2;
-                    Vec3d<s16> accel_1;
+                    utils::Vec3d<s16> accel_1;
                     u32 last_sample_2h      : 19;
                     u32 delta_last_first_0  : 13;
                     u16 delta_last_first_1  : 13;
                     u16 delta_last_first_2l : 3;
-                    Vec3d<s16> accel_2;
+                    utils::Vec3d<s16> accel_2;
                     u32 delta_last_first_2h : 10;
                     u32 delta_mid_avg_0     : 7;
                     u32 delta_mid_avg_1     : 7;
@@ -118,80 +183,9 @@ namespace ams::controller {
                     u32 timestamp_start_l   : 1;
                     u16 timestamp_start_h   : 10;
                     u16 timestamp_count     : 6;
-                } PACKED packing_mode_2;
-            } quaternion;
+                } PACKED mode2;
+            } dscale;
         };
     };
 
-    enum GyroSensitivity : u8 {
-        GyroSensitivity_250Dps  = 0,
-        GyroSensitivity_500Dps  = 1,
-        GyroSensitivity_1000Dps = 2,
-        GyroSensitivity_2000Dps = 3
-    };
-
-    enum AccelSensitivity : u8 {
-        AccelSensitivity_8G  = 0,
-        AccelSensitivity_4G  = 1,
-        AccelSensitivity_2G  = 2,
-        AccelSensitivity_16G = 3
-    };
-
-    class SwitchMotionPacker {
-        public:
-            virtual void PackData(SwitchMotionData* motion_data, Vec3d<float> accel, Vec3d<float> gyro) = 0;
-            void SetGyroSensitivity(GyroSensitivity sensitivity) { m_gyro_sensitivity = sensitivity; }
-            void SetAccelSensitivity(AccelSensitivity sensitivity) { m_accel_sensitivity = sensitivity; }
-            GyroSensitivity GetGyroSensitivity() { return m_gyro_sensitivity; }
-            AccelSensitivity GetAccelSensitivity() { return m_accel_sensitivity; }
-
-        protected:
-            GyroSensitivity m_gyro_sensitivity;
-            AccelSensitivity m_accel_sensitivity;
-            float m_gyro_scaling_factor;
-            float m_accel_scaling_factor;
-    };
-
-    class NullMotionPacker final : public SwitchMotionPacker {
-        public:
-            void PackData(SwitchMotionData* motion_data, Vec3d<float> accel, Vec3d<float> gyro) override;
-    };
-
-    class StandardMotionPacker final : public SwitchMotionPacker {
-        public:
-            void PackData(SwitchMotionData* motion_data, Vec3d<float> accel, Vec3d<float> gyro) override;
-    };
-
-    class QuaternionMotionPacker final : public SwitchMotionPacker {
-        private:
-            struct Quaternion {
-                constexpr Quaternion() : x(0), y(0), z(0), w(1) {};
-                constexpr Quaternion(double x, double y, double z, double w) : x(x), y(y), z(z), w(w) {};
-
-                union {
-                    double raw[4];
-                    struct {
-                        double x;
-                        double y;
-                        double z;
-                        double w;
-                    };
-                };
-            };
-            
-            static constexpr Quaternion HamiltonProduct(Quaternion q1, Quaternion q2);
-            static constexpr Quaternion QuaternionNormalize(Quaternion q);
-            
-        public:
-            QuaternionMotionPacker();
-            void PackData(SwitchMotionData* motion_data, Vec3d<float> accel, Vec3d<float> gyro) override;
-            
-        private:
-            void UpdateRotationState(Vec3d<float> gyro);
-            void PackGyroFixedPrecision(SwitchMotionData* motion_data);
-            
-        private:
-            os::Tick m_previous_tick;
-            Quaternion m_rotation_state;
-    };
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "wii_controller.hpp"
-#include "controller_utils.hpp"
 #include "../async/async.hpp"
 #include <stratosphere.hpp>
 
@@ -25,12 +24,14 @@ namespace ams::controller {
         constinit const u8 InitData1[] = { 0x55 };
         constinit const u8 InitData2[] = { 0x00 };
 
-        constexpr float NunchuckStickScaleFactor = float(UINT12_MAX) / 0xb8;
-        constexpr float WiiUStickScaleFactor     = 2.0;
-        constexpr float LeftStickScaleFactor     = float(UINT12_MAX) / 0x3f;
-        constexpr float RighStickScaleFactor     = float(UINT12_MAX) / 0x1f;
+        constexpr u8 PlayerLedPatterns[] = { 0b0000, 0b0001, 0b0011, 0b0111, 0b1111, 0b1001, 0b1010, 0b1011, 0b0110 };
 
-        constinit const u16 DpadStickPositions[] = { SwitchAnalogStick::Min, SwitchAnalogStick::Center, SwitchAnalogStick::Max };
+        constexpr float NunchuckStickScaleFactor = float(SwitchAnalogStick::MaximumValue) / 0xb8;
+        constexpr float WiiUStickScaleFactor     = 2.0;
+        constexpr float LeftStickScaleFactor     = float(SwitchAnalogStick::MaximumValue) / 0x3f;
+        constexpr float RighStickScaleFactor     = float(SwitchAnalogStick::MaximumValue) / 0x1f;
+
+        constinit const u16 DpadStickPositions[] = { SwitchAnalogStick::MinimumValue, SwitchAnalogStick::CenterValue, SwitchAnalogStick::MaximumValue };
 
         constexpr float CalibrateWeightData(u16 x, u16 cal_0kg, u16 cal_17kg, u16 cal_34kg) {
             x = util::SwapEndian(x);
@@ -69,30 +70,31 @@ namespace ams::controller {
         R_SUCCEED();
     }
 
-    void WiiController::ProcessInputData(const bluetooth::HidReport *report) {
-        auto wii_report = reinterpret_cast<const WiiReportData *>(&report->data);
+    void WiiController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const WiiReportData *>(report_buffer);
 
-        switch(wii_report->id) {
+        switch(report->id) {
             case 0x20:
-                this->MapInputReport0x20(wii_report);
-                this->HandleStatusReport(wii_report);
+                this->MapInputReport0x20(report);
+                this->HandleStatusReport(report);
                 break;
             case 0x21:
-                this->MapInputReport0x21(wii_report); break;
+                this->MapInputReport0x21(report); break;
             case 0x22:
-                this->MapInputReport0x22(wii_report); break;
+                this->MapInputReport0x22(report); break;
             case 0x30:
-                this->MapInputReport0x30(wii_report); break;
+                this->MapInputReport0x30(report); break;
             case 0x31:
-                this->MapInputReport0x31(wii_report); break;
+                this->MapInputReport0x31(report); break;
             case 0x32:
-                this->MapInputReport0x32(wii_report); break;
+                this->MapInputReport0x32(report); break;
             case 0x34:
-                this->MapInputReport0x34(wii_report); break;
+                this->MapInputReport0x34(report); break;
             case 0x35:
-                this->MapInputReport0x35(wii_report); break;
-            case 0x3d:
-                this->MapInputReport0x3d(wii_report); break;
+                this->MapInputReport0x35(report); break;
+            case 0x3D:
+                this->MapInputReport0x3D(report); break;
             default:
                 break;
         }
@@ -102,7 +104,8 @@ namespace ams::controller {
         this->MapCoreButtons(&src->input0x20.buttons);
 
         if (m_extension != WiiExtensionController_WiiUPro) {
-            m_battery = convert_battery_255(src->input0x20.battery);
+            auto battery_level = SwitchBatteryLevelConverter::ConvertValue(src->input0x20.battery);
+            m_power_info.SetBatteryLevel(battery_level);
         }
     }
 
@@ -147,8 +150,8 @@ namespace ams::controller {
         this->MapExtensionBytes(src->input0x35.extension);
     }
 
-    void WiiController::MapInputReport0x3d(const WiiReportData *src) {
-        this->MapExtensionBytes(src->input0x3d.extension);
+    void WiiController::MapInputReport0x3D(const WiiReportData *src) {
+        this->MapExtensionBytes(src->input0x3D.extension);
     }
 
     void WiiController::MapCoreButtons(const WiiButtonData *buttons) {
@@ -157,47 +160,45 @@ namespace ams::controller {
             return;
         }
 
+        SwitchButtons button_state = m_buttons;
         if (m_orientation == WiiControllerOrientation_Horizontal) {
             // Map dpad as left stick to increase compatibility with games not supporting movement via dpad
-            m_left_stick.SetData(
+            m_left_stick.SetValues(
                 DpadStickPositions[1 + buttons->dpad_down - buttons->dpad_up],
                 DpadStickPositions[1 + buttons->dpad_right - buttons->dpad_left]
             );
 
-            m_buttons.A = buttons->two;
-            m_buttons.B = buttons->one;
-
-            m_buttons.R = buttons->A;
-            m_buttons.L = buttons->B;
-
-            m_buttons.minus = buttons->minus;
-            m_buttons.plus  = buttons->plus;
-
-            m_buttons.home = buttons->home;
+            button_state.Assign(SwitchButton::A,     buttons->two);
+            button_state.Assign(SwitchButton::B,     buttons->one);
+            button_state.Assign(SwitchButton::R,     buttons->A);
+            button_state.Assign(SwitchButton::L,     buttons->B);
+            button_state.Assign(SwitchButton::Minus, buttons->minus);
+            button_state.Assign(SwitchButton::Plus,  buttons->plus);
+            button_state.Assign(SwitchButton::Home,  buttons->home);
         } else {
-            m_buttons.dpad_down  = buttons->dpad_down;
-            m_buttons.dpad_up    = buttons->dpad_up;
-            m_buttons.dpad_right = buttons->dpad_right;
-            m_buttons.dpad_left  = buttons->dpad_left;
-
-            m_buttons.A = buttons->A;
-            m_buttons.B = buttons->B;
+            button_state.Assign(SwitchButton::Down,  buttons->dpad_down);
+            button_state.Assign(SwitchButton::Up,    buttons->dpad_up);
+            button_state.Assign(SwitchButton::Right, buttons->dpad_right);
+            button_state.Assign(SwitchButton::Left,  buttons->dpad_left);
+            button_state.Assign(SwitchButton::A,     buttons->A);
+            button_state.Assign(SwitchButton::B,     buttons->B);
 
             if ((m_extension == WiiExtensionController_ClassicPro) || (m_extension == WiiExtensionController_MotionPlusClassicControllerPassthrough)) {
                 // Allow buttons one and two to be used for L3/R3 when Classic or Classic Pro controller connected
-                m_buttons.lstick_press = buttons->one;
-                m_buttons.rstick_press = buttons->two;
+                button_state.Assign(SwitchButton::StickL, buttons->one);
+                button_state.Assign(SwitchButton::StickR, buttons->two);
             } else {
                 // Not the best mapping but at least most buttons are mapped to something when nunchuck is connected.
-                m_buttons.R  = buttons->one;
-                m_buttons.ZR = buttons->two;
+                button_state.Assign(SwitchButton::R,  buttons->one);
+                button_state.Assign(SwitchButton::ZR, buttons->two);
             }
 
-            m_buttons.minus = buttons->minus;
-            m_buttons.plus  = buttons->plus;
-
-            m_buttons.home = buttons->home;
+            button_state.Assign(SwitchButton::Minus, buttons->minus);
+            button_state.Assign(SwitchButton::Plus,  buttons->plus);
+            button_state.Assign(SwitchButton::Home, buttons->home);
         }
+
+        m_buttons = button_state;
     }
 
     void WiiController::MapAccelerometerData(const WiiAccelerometerData *accel, const WiiButtonData *buttons) {
@@ -218,6 +219,8 @@ namespace ams::controller {
             m_accel.y = -x;
             m_accel.z =  z;
         }
+
+        m_sixaxis_processor.Update(m_accel, m_gyro);
     }
 
     void WiiController::MapExtensionBytes(const u8 ext[]) {
@@ -244,95 +247,99 @@ namespace ams::controller {
     void WiiController::MapNunchuckExtension(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const WiiNunchuckExtensionData *>(ext);
 
-        m_left_stick.SetData(
-            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_x - 0x80) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max),
-            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_y - 0x80) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max)
+        m_left_stick.SetValues(
+            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_x - 0x80) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue),
+            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_y - 0x80) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue)
         );
 
-        m_buttons.L  = !extension_data->C;
-        m_buttons.ZL = !extension_data->Z;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::L,  !extension_data->C);
+        button_state.Assign(SwitchButton::ZL, !extension_data->Z);
+        m_buttons = button_state;
     }
 
     void WiiController::MapClassicControllerExtension(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const WiiClassicControllerExtensionData *>(ext);
 
-        m_left_stick.SetData(
-            static_cast<u16>(LeftStickScaleFactor * (extension_data->left_stick_x - 0x20) + SwitchAnalogStick::Center) & UINT12_MAX,
-            static_cast<u16>(LeftStickScaleFactor * (extension_data->left_stick_y - 0x20) + SwitchAnalogStick::Center) & UINT12_MAX
-        );
-        m_right_stick.SetData(
-            static_cast<u16>(RighStickScaleFactor * (((extension_data->right_stick_x_43 << 3) | (extension_data->right_stick_x_21 << 1) | extension_data->right_stick_x_0) - 0x10) + SwitchAnalogStick::Center) & UINT12_MAX,
-            static_cast<u16>(RighStickScaleFactor * (extension_data->right_stick_y - 0x10) + SwitchAnalogStick::Center) & UINT12_MAX
+        m_left_stick.SetValues(
+            static_cast<u16>(LeftStickScaleFactor * (extension_data->left_stick_x - 0x20) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue,
+            static_cast<u16>(LeftStickScaleFactor * (extension_data->left_stick_y - 0x20) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue
         );
 
-        m_buttons.dpad_down  |= !extension_data->buttons.dpad_down;
-        m_buttons.dpad_up    |= !extension_data->buttons.dpad_up;
-        m_buttons.dpad_right |= !extension_data->buttons.dpad_right;
-        m_buttons.dpad_left  |= !extension_data->buttons.dpad_left;
+        m_right_stick.SetValues(
+            static_cast<u16>(RighStickScaleFactor * (((extension_data->right_stick_x_43 << 3) | (extension_data->right_stick_x_21 << 1) | extension_data->right_stick_x_0) - 0x10) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue,
+            static_cast<u16>(RighStickScaleFactor * (extension_data->right_stick_y - 0x10) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue
+        );
 
-        m_buttons.A |= !extension_data->buttons.A;
-        m_buttons.B |= !extension_data->buttons.B;
-        m_buttons.X  = !extension_data->buttons.X;
-        m_buttons.Y  = !extension_data->buttons.Y;
-
-        m_buttons.L  = !extension_data->buttons.L | (((extension_data->left_trigger_43 << 3) | (extension_data->left_trigger_20)) > (m_trigger_threshold * 0x1f));
-        m_buttons.ZL = !extension_data->buttons.ZL;
-        m_buttons.R  = !extension_data->buttons.R | (extension_data->right_trigger > (m_trigger_threshold * 0x1f));
-        m_buttons.ZR = !extension_data->buttons.ZR;
-
-        m_buttons.minus |= !extension_data->buttons.minus;
-        m_buttons.plus  |= !extension_data->buttons.plus;
-
-        m_buttons.home |= !extension_data->buttons.home;
+        SwitchButtons button_state = m_buttons;
+        button_state.SetIf(SwitchButton::Down,  !extension_data->buttons.dpad_down);
+        button_state.SetIf(SwitchButton::Up,    !extension_data->buttons.dpad_up);
+        button_state.SetIf(SwitchButton::Right, !extension_data->buttons.dpad_right);
+        button_state.SetIf(SwitchButton::Left,  !extension_data->buttons.dpad_left);
+        button_state.SetIf(SwitchButton::A,     !extension_data->buttons.A);
+        button_state.SetIf(SwitchButton::B,     !extension_data->buttons.B);
+        button_state.Assign(SwitchButton::X,    !extension_data->buttons.X);
+        button_state.Assign(SwitchButton::Y,    !extension_data->buttons.Y);
+        button_state.Assign(SwitchButton::L,    !extension_data->buttons.L | (((extension_data->left_trigger_43 << 3) | (extension_data->left_trigger_20)) > (m_trigger_threshold * 0x1f)));
+        button_state.Assign(SwitchButton::R,    !extension_data->buttons.R | (extension_data->right_trigger > (m_trigger_threshold * 0x1f)));
+        button_state.Assign(SwitchButton::ZL,   !extension_data->buttons.ZL);
+        button_state.Assign(SwitchButton::ZR,   !extension_data->buttons.ZR);
+        button_state.SetIf(SwitchButton::Minus, !extension_data->buttons.minus);
+        button_state.SetIf(SwitchButton::Plus,  !extension_data->buttons.plus);
+        button_state.SetIf(SwitchButton::Home,  !extension_data->buttons.home);
+        m_buttons = button_state;
     }
 
     void WiiController::MapWiiUProControllerExtension(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const WiiUProExtensionData *>(ext);
 
-        m_left_stick.SetData(
-            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->left_stick_x - SwitchAnalogStick::Center))) + SwitchAnalogStick::Center, SwitchAnalogStick::Min, SwitchAnalogStick::Max),
-            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->left_stick_y - SwitchAnalogStick::Center))) + SwitchAnalogStick::Center, SwitchAnalogStick::Min, SwitchAnalogStick::Max)
-        );
-        m_right_stick.SetData(
-            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->right_stick_x - SwitchAnalogStick::Center))) + SwitchAnalogStick::Center, SwitchAnalogStick::Min, SwitchAnalogStick::Max),
-            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->right_stick_y - SwitchAnalogStick::Center))) + SwitchAnalogStick::Center, SwitchAnalogStick::Min, SwitchAnalogStick::Max)
+        m_left_stick.SetValues(
+            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->left_stick_x - SwitchAnalogStick::CenterValue))) + SwitchAnalogStick::CenterValue, SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue),
+            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->left_stick_y - SwitchAnalogStick::CenterValue))) + SwitchAnalogStick::CenterValue, SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue)
         );
 
-        m_buttons.dpad_down  = !extension_data->buttons.dpad_down;
-        m_buttons.dpad_up    = !extension_data->buttons.dpad_up;
-        m_buttons.dpad_right = !extension_data->buttons.dpad_right;
-        m_buttons.dpad_left  = !extension_data->buttons.dpad_left;
+        m_right_stick.SetValues(
+            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->right_stick_x - SwitchAnalogStick::CenterValue))) + SwitchAnalogStick::CenterValue, SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue),
+            std::clamp<u16>(((WiiUStickScaleFactor * (extension_data->right_stick_y - SwitchAnalogStick::CenterValue))) + SwitchAnalogStick::CenterValue, SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue)
+        );
 
-        m_buttons.A = !extension_data->buttons.A;
-        m_buttons.B = !extension_data->buttons.B;
-        m_buttons.X = !extension_data->buttons.X;
-        m_buttons.Y = !extension_data->buttons.Y;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,   !extension_data->buttons.dpad_down);
+        button_state.Assign(SwitchButton::Up,     !extension_data->buttons.dpad_up);
+        button_state.Assign(SwitchButton::Right,  !extension_data->buttons.dpad_right);
+        button_state.Assign(SwitchButton::Left,   !extension_data->buttons.dpad_left);
+        button_state.Assign(SwitchButton::A,      !extension_data->buttons.A);
+        button_state.Assign(SwitchButton::B,      !extension_data->buttons.B);
+        button_state.Assign(SwitchButton::X,      !extension_data->buttons.X);
+        button_state.Assign(SwitchButton::Y,      !extension_data->buttons.Y);
+        button_state.Assign(SwitchButton::R,      !extension_data->buttons.R);
+        button_state.Assign(SwitchButton::L,      !extension_data->buttons.L);
+        button_state.Assign(SwitchButton::ZR,     !extension_data->buttons.ZR);
+        button_state.Assign(SwitchButton::ZL,     !extension_data->buttons.ZL);
+        button_state.Assign(SwitchButton::Minus,  !extension_data->buttons.minus);
+        button_state.Assign(SwitchButton::Plus,   !extension_data->buttons.plus);
+        button_state.Assign(SwitchButton::StickL, !extension_data->buttons.lstick_press);
+        button_state.Assign(SwitchButton::StickR, !extension_data->buttons.rstick_press);
+        button_state.Assign(SwitchButton::Home,   !extension_data->buttons.home);
+        m_buttons = button_state;
 
-        m_buttons.R  = !extension_data->buttons.R;
-        m_buttons.ZR = !extension_data->buttons.ZR;
-        m_buttons.L  = !extension_data->buttons.L;
-        m_buttons.ZL = !extension_data->buttons.ZL;
-
-        m_buttons.minus = !extension_data->buttons.minus;
-        m_buttons.plus  = !extension_data->buttons.plus;
-
-        m_buttons.lstick_press = !extension_data->buttons.lstick_press;
-        m_buttons.rstick_press = !extension_data->buttons.rstick_press;
-
-        m_buttons.home = !extension_data->buttons.home;
-
-        m_ext_power = !extension_data->buttons.usb_connected;
-        m_charging = !extension_data->buttons.charging;
-        m_battery = (extension_data->buttons.battery == 0b111) ? 0 : (extension_data->buttons.battery << 1);
+        bool powered = !extension_data->buttons.usb_connected;
+        bool charging = !extension_data->buttons.charging;
+        auto battery_level = static_cast<SwitchBatteryLevel>((extension_data->buttons.battery == 0b111) ? 0 : (extension_data->buttons.battery));
+        m_power_info.SetPowered(powered);
+        m_power_info.SetCharging(charging);
+        m_power_info.SetBatteryLevel(battery_level);
     }
 
     void WiiController::MapTaTaConExtension(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const TaTaConExtensionData *>(ext);
 
-        m_buttons.X           = !extension_data->R_rim;
-        m_buttons.Y           = !extension_data->R_center;
-        m_buttons.dpad_up    |= !extension_data->L_rim;
-        m_buttons.dpad_right |= !extension_data->L_center;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::X,    !extension_data->R_rim);
+        button_state.Assign(SwitchButton::Y,    !extension_data->R_center);
+        button_state.SetIf(SwitchButton::Up,    !extension_data->L_rim);
+        button_state.SetIf(SwitchButton::Right, !extension_data->L_center);
+        m_buttons = button_state;
     }
 
     void WiiController::MapBalanceBoardExtension(const u8 ext[]) {
@@ -351,9 +358,9 @@ namespace ams::controller {
             y = ApplyEasingFunction(((top_right + top_left) - (bottom_right + bottom_left)) / total_weight);
         }
 
-        m_left_stick.SetData(
-            std::clamp<u16>(static_cast<u16>((x * (UINT12_MAX / 2)) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max),
-            std::clamp<u16>(static_cast<u16>((y * (UINT12_MAX / 2)) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max)
+        m_left_stick.SetValues(
+            std::clamp<u16>(static_cast<u16>((x * (SwitchAnalogStick::MaximumValue / 2)) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue),
+            std::clamp<u16>(static_cast<u16>((y * (SwitchAnalogStick::MaximumValue / 2)) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue)
         );
     }
 
@@ -392,6 +399,8 @@ namespace ams::controller {
                 m_gyro.y = -pitch;
                 m_gyro.z =  yaw;
             }
+
+            m_sixaxis_processor.Update(m_accel, m_gyro);
         } else {
             if (m_extension == WiiExtensionController_MotionPlusNunchuckPassthrough) {
                 this->MapNunchuckExtensionPassthroughMode(ext);
@@ -404,46 +413,47 @@ namespace ams::controller {
     void WiiController::MapNunchuckExtensionPassthroughMode(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const WiiNunchuckPassthroughExtensionData *>(ext);
 
-        m_left_stick.SetData(
-            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_x - 0x80) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max),
-            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_y - 0x80) + SwitchAnalogStick::Center), SwitchAnalogStick::Min, SwitchAnalogStick::Max)
+        m_left_stick.SetValues(
+            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_x - 0x80) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue),
+            std::clamp<u16>(static_cast<u16>(NunchuckStickScaleFactor * (extension_data->stick_y - 0x80) + SwitchAnalogStick::CenterValue), SwitchAnalogStick::MinimumValue, SwitchAnalogStick::MaximumValue)
         );
 
-        m_buttons.L  = !extension_data->C;
-        m_buttons.ZL = !extension_data->Z;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::L,  !extension_data->C);
+        button_state.Assign(SwitchButton::ZL, !extension_data->Z);
+        m_buttons = button_state;
     }
 
     void WiiController::MapClassicControllerExtensionPassthroughMode(const u8 ext[]) {
         auto extension_data = reinterpret_cast<const WiiClassicControllerPassthroughExtensionData *>(ext);
 
-        m_left_stick.SetData(
-            static_cast<u16>(LeftStickScaleFactor * ((extension_data->left_stick_x_51 << 1) - 0x20) + SwitchAnalogStick::Center) & UINT12_MAX,
-            static_cast<u16>(LeftStickScaleFactor * ((extension_data->left_stick_y_51 << 1) - 0x20) + SwitchAnalogStick::Center) & UINT12_MAX
-        );
-        m_right_stick.SetData(
-            static_cast<u16>(RighStickScaleFactor * (((extension_data->right_stick_x_43 << 3) | (extension_data->right_stick_x_21 << 1) | extension_data->right_stick_x_0) - 0x10) + SwitchAnalogStick::Center) & UINT12_MAX,
-            static_cast<u16>(RighStickScaleFactor * (extension_data->right_stick_y - 0x10) + SwitchAnalogStick::Center) & UINT12_MAX
+        m_left_stick.SetValues(
+            static_cast<u16>(LeftStickScaleFactor * ((extension_data->left_stick_x_51 << 1) - 0x20) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue,
+            static_cast<u16>(LeftStickScaleFactor * ((extension_data->left_stick_y_51 << 1) - 0x20) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue
         );
 
-        m_buttons.dpad_down  |= !extension_data->buttons.dpad_down;
-        m_buttons.dpad_up    |= !extension_data->buttons.dpad_up;
-        m_buttons.dpad_right |= !extension_data->buttons.dpad_right;
-        m_buttons.dpad_left  |= !extension_data->buttons.dpad_left;
+        m_right_stick.SetValues(
+            static_cast<u16>(RighStickScaleFactor * (((extension_data->right_stick_x_43 << 3) | (extension_data->right_stick_x_21 << 1) | extension_data->right_stick_x_0) - 0x10) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue,
+            static_cast<u16>(RighStickScaleFactor * (extension_data->right_stick_y - 0x10) + SwitchAnalogStick::CenterValue) & SwitchAnalogStick::MaximumValue
+        );
 
-        m_buttons.A |= !extension_data->buttons.A;
-        m_buttons.B |= !extension_data->buttons.B;
-        m_buttons.X  = !extension_data->buttons.X;
-        m_buttons.Y  = !extension_data->buttons.Y;
-
-        m_buttons.L  = !extension_data->buttons.L | (((extension_data->left_trigger_43 << 3) | (extension_data->left_trigger_20)) > (m_trigger_threshold * 0x1f));
-        m_buttons.ZL = !extension_data->buttons.ZL;
-        m_buttons.R  = !extension_data->buttons.R | (extension_data->right_trigger > (m_trigger_threshold * 0x1f));
-        m_buttons.ZR = !extension_data->buttons.ZR;
-
-        m_buttons.minus |= !extension_data->buttons.minus;
-        m_buttons.plus  |= !extension_data->buttons.plus;
-
-        m_buttons.home |= !extension_data->buttons.home;
+        SwitchButtons button_state = m_buttons;
+        button_state.SetIf(SwitchButton::Down,  !extension_data->buttons.dpad_down);
+        button_state.SetIf(SwitchButton::Up,    !extension_data->buttons.dpad_up);
+        button_state.SetIf(SwitchButton::Right, !extension_data->buttons.dpad_right);
+        button_state.SetIf(SwitchButton::Left,  !extension_data->buttons.dpad_left);
+        button_state.SetIf(SwitchButton::A,     !extension_data->buttons.A);
+        button_state.SetIf(SwitchButton::B,     !extension_data->buttons.B);
+        button_state.Assign(SwitchButton::X,    !extension_data->buttons.X);
+        button_state.Assign(SwitchButton::Y,    !extension_data->buttons.Y);
+        button_state.Assign(SwitchButton::L,    !extension_data->buttons.L | (((extension_data->left_trigger_43 << 3) | (extension_data->left_trigger_20)) > (m_trigger_threshold * 0x1f)));
+        button_state.Assign(SwitchButton::R,    !extension_data->buttons.R | (extension_data->right_trigger > (m_trigger_threshold * 0x1f)));
+        button_state.Assign(SwitchButton::ZL,   !extension_data->buttons.ZL);
+        button_state.Assign(SwitchButton::ZR,   !extension_data->buttons.ZR);
+        button_state.SetIf(SwitchButton::Minus, !extension_data->buttons.minus);
+        button_state.SetIf(SwitchButton::Plus,  !extension_data->buttons.plus);
+        button_state.SetIf(SwitchButton::Home,  !extension_data->buttons.home);
+        m_buttons = button_state;
     }
 
     void WiiController::HandleStatusReport(const WiiReportData *wii_report) {
@@ -711,47 +721,39 @@ namespace ams::controller {
     }
 
     Result WiiController::SetReportMode(u8 mode) {
-        std::scoped_lock lk(m_output_mutex);
+        WiiReportData report;
+        report.id = 0x12;
+        report.output0x12.rumble      = m_rumble_state;
+        report.output0x12.report_mode = mode;
 
-        m_output_report.size = sizeof(WiiOutputReport0x12) + 1;
-        auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-        report_data->id = 0x12;
-        report_data->output0x12.rumble = m_rumble_state;
-        report_data->output0x12.report_mode = mode;
-
-        R_RETURN(this->WriteDataReport(&m_output_report));
+        R_RETURN(this->WriteDataReport(&report, sizeof(WiiOutputReport0x12) + 1));
     }
 
     Result WiiController::QueryStatus() {
-        std::scoped_lock lk(m_output_mutex);
+        WiiReportData report;
+        report.id = 0x15;
+        report.output0x15.rumble = m_rumble_state;
 
-        m_output_report.size = sizeof(WiiOutputReport0x15) + 1;
-        auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-        report_data->id = 0x15;
-        report_data->output0x15.rumble = m_rumble_state;
-
-        R_RETURN(this->WriteDataReport(&m_output_report));
+        R_RETURN(this->WriteDataReport(&report, sizeof(WiiOutputReport0x15) + 1));
     }
 
-    Result WiiController::WriteMemory(u32 write_addr, const void *data, u8 size) {       
+    Result WiiController::WriteMemory(u32 write_addr, const void *data, u8 size) {
         os::SleepThread(ams::TimeSpan::FromMilliSeconds(30));
 
         Result result;
-        auto output = std::make_unique<bluetooth::HidReport>();
-
-        std::scoped_lock lk(m_output_mutex);
 
         int attempts = 0;
         do {
-            m_output_report.size = sizeof(WiiOutputReport0x16) + 1;
-            auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-            report_data->id = 0x16;
-            report_data->output0x16.address = ams::util::SwapEndian(write_addr);
-            report_data->output0x16.size = size;
-            std::memcpy(&report_data->output0x16.data, data, size);
+            WiiReportData report;
+            report.id = 0x16;
+            report.output0x16.address = ams::util::SwapEndian(write_addr);
+            report.output0x16.size    = size;
+            std::memcpy(report.output0x16.data, data, size);
 
-            R_TRY(this->WriteDataReport(&m_output_report, 0x22, output.get()));
-            report_data = reinterpret_cast<WiiReportData *>(&output->data);
+            bluetooth::HidReport response;
+            R_TRY(this->WriteDataReport(&report, sizeof(WiiOutputReport0x16) + 1, 0x22, &response));
+
+            auto report_data = reinterpret_cast<WiiReportData *>(response.data);
             result = report_data->input0x22.error;
         } while (!(R_SUCCEEDED(result) || (++attempts >= 2)));
 
@@ -762,20 +764,18 @@ namespace ams::controller {
         os::SleepThread(ams::TimeSpan::FromMilliSeconds(30));
 
         Result result;
-        auto output = std::make_unique<bluetooth::HidReport>();
-
-        std::scoped_lock lk(m_output_mutex);
 
         int attempts = 0;
         do {
-            m_output_report.size = sizeof(WiiOutputReport0x17) + 1;
-            auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-            report_data->id = 0x17;
-            report_data->output0x17.address = ams::util::SwapEndian(read_addr);
-            report_data->output0x17.size = ams::util::SwapEndian(size);
+            WiiReportData report;
+            report.id = 0x17;
+            report.output0x17.address = ams::util::SwapEndian(read_addr);
+            report.output0x17.size    = ams::util::SwapEndian(size);
 
-            R_TRY(this->WriteDataReport(&m_output_report, 0x21, output.get()));
-            report_data = reinterpret_cast<WiiReportData *>(&output->data);
+            bluetooth::HidReport response;
+            R_TRY(this->WriteDataReport(&report, sizeof(WiiOutputReport0x17) + 1, 0x21, &response));
+
+            auto report_data = reinterpret_cast<WiiReportData *>(response.data);
             result = report_data->input0x21.error;
 
             if (R_SUCCEEDED(result)) {
@@ -881,39 +881,32 @@ namespace ams::controller {
                          motor_data->right_motor.low_band_amp  > 0 ||
                          motor_data->right_motor.high_band_amp > 0;
 
-        std::scoped_lock lk(m_output_mutex);
+        WiiReportData report;
+        report.id = 0x10;
+        report.output0x10.rumble = m_rumble_state;
 
-        m_output_report.size = sizeof(WiiOutputReport0x10) + 1;
-        auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-        report_data->id = 0x10;
-        report_data->output0x10.rumble = m_rumble_state;
-
-        R_RETURN(this->WriteDataReport(&m_output_report));
+        R_RETURN(this->WriteDataReport(&report, sizeof(WiiOutputReport0x10) + 1));
     }
 
     Result WiiController::CancelVibration() {
         m_rumble_state = 0;
 
-        std::scoped_lock lk(m_output_mutex);
+        WiiReportData report;
+        report.id = 0x10;
+        report.output0x10.rumble = m_rumble_state;
 
-        m_output_report.size = sizeof(WiiOutputReport0x10) + 1;
-        auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-        report_data->id = 0x10;
-        report_data->output0x10.rumble = m_rumble_state;
-
-        R_RETURN(this->WriteDataReport(&m_output_report));
+        R_RETURN(this->WriteDataReport(&report, sizeof(WiiOutputReport0x10) + 1));
     }
 
-    Result WiiController::SetPlayerLed(u8 led_mask) {
-        std::scoped_lock lk(m_output_mutex);
+    Result WiiController::SetPlayerLed(SwitchPlayerNumber player_number) {
+        u8 player_index = static_cast<u8>(player_number);
 
-        m_output_report.size = sizeof(WiiOutputReport0x11) + 1;
-        auto report_data = reinterpret_cast<WiiReportData *>(m_output_report.data);
-        report_data->id = 0x11;
-        report_data->output0x11.rumble = m_rumble_state;
-        report_data->output0x11.leds = led_mask & 0xf;
+        WiiReportData report;
+        report.id = 0x11;
+        report.output0x11.rumble = m_rumble_state;
+        report.output0x11.leds   = PlayerLedPatterns[player_index];
 
-        R_RETURN(this->WriteDataReport(&m_output_report));
+        R_RETURN(this->WriteDataReport(&report, sizeof(WiiOutputReport0x11) + 1));
     }
 
 }

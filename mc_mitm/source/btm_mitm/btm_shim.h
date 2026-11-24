@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,14 +20,16 @@
 extern "C" {
 #endif
 
-Result btmGetDeviceConditionFwd(Service* s, BtmProfile profile, BtmConnectedDeviceV13 *condition, size_t count, s32 *total_out);
-Result btmGetDeviceInfoFwd(Service* s, BtmProfile profile, BtmDeviceInfoV13 *devices, size_t count, s32 *total_out);
+Result btmGetDeviceConditionFwd(Service* s, BtmProfile profile, BtmDeviceCondition *device_condition, size_t count, s32 *total_out);
+Result btmGetDeviceInfoFwd(Service* s, BtmProfile profile, BtmDeviceInfo *device_info, size_t count, s32 *total_out);
+Result btmGetShortenedDeviceInfoFwd(Service* s, BtmProfile profile, BtmShortenedDeviceInfo *device_info, size_t count, s32 *total_out);
+Result btmGetShortenedDeviceConditionFwd(Service* s, BtmProfile profile, BtmShortenedDeviceCondition *device_condition, size_t count, s32 *total_out);
 
 /* Deprecated */
-Result btmGetDeviceConditionDeprecated1Fwd(Service* s, BtmDeviceConditionV100 *condition);
-Result btmGetDeviceConditionDeprecated2Fwd(Service* s, BtmDeviceConditionV510 *condition);
-Result btmGetDeviceConditionDeprecated3Fwd(Service* s, BtmDeviceConditionV800 *condition);
-Result btmGetDeviceConditionDeprecated4Fwd(Service* s, BtmDeviceConditionV900 *condition);
+Result btmGetDeviceConditionDeprecated1Fwd(Service* s, BtmDeviceConditionListV100 *condition);
+Result btmGetDeviceConditionDeprecated2Fwd(Service* s, BtmDeviceConditionListV510 *condition);
+Result btmGetDeviceConditionDeprecated3Fwd(Service* s, BtmDeviceConditionListV800 *condition);
+Result btmGetDeviceConditionDeprecated4Fwd(Service* s, BtmDeviceConditionListV900 *condition);
 Result btmGetDeviceInfoDeprecatedFwd(Service* s, BtmDeviceInfoList *devices);
 
 #ifdef __cplusplus

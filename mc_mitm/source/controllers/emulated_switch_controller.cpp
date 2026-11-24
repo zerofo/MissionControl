@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,31 +14,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "emulated_switch_controller.hpp"
-#include "../utils.hpp"
 #include "../mcmitm_config.hpp"
 
 namespace ams::controller {
 
-    namespace {
-
-        // CRC-8 with polynomial 0x7 for NFC/IR packets
-        constexpr u8 ComputeCrc8(const void *data, size_t size) {
-            return utils::Crc8<7>::Calculate(data, size);
-        }
-    }
-
-    EmulatedSwitchController::EmulatedSwitchController(const bluetooth::Address *address, HardwareID id)
-    : SwitchController(address, id)
-    , m_charging(false)
-    , m_ext_power(false)
-    , m_battery(BATTERY_MAX)
-    , m_led_pattern(0)
-    , m_input_report_mode(0x30)
-    , m_mcu_mode(McuMode_Suspended) {
-        this->ClearControllerState();
-
+    EmulatedSwitchController::EmulatedSwitchController(bluetooth::Address address, HardwareID id) : SwitchController(address, id)
+    , m_device_info(SwitchDevices::ProController)
+    , m_latency_timer(0)
+    , m_input_report_mode(SwitchHidReportId::BasicInputReport)
+    , m_vibration_processor(this)
+    , m_hid_command_processor(this)
+    , m_ext_grip_command_processor(this) {
         auto config = mitm::GetGlobalConfig();
-        m_enable_rumble = config->general.enable_rumble;
+        m_vibration_processor.SetEnabled(config->general.enable_rumble);
         m_enable_motion = config->general.enable_motion;
         m_trigger_threshold = config->misc.analog_trigger_activation_threshold / 100.0;
     };
@@ -47,7 +35,7 @@ namespace ams::controller {
         R_TRY(SwitchController::Initialize());
 
         // Ensure config directory for this controller exists
-        std::string controller_dir = GetControllerDirectory(&m_address);
+        std::string controller_dir = GetControllerDirectory(m_address);
         R_TRY(fs::EnsureDirectory(controller_dir.c_str()));
 
         R_TRY(m_virtual_memory.Initialize((controller_dir + "/spi_flash.bin").c_str()));
@@ -55,604 +43,246 @@ namespace ams::controller {
         R_SUCCEED();
     }
 
-    void EmulatedSwitchController::ClearControllerState() {
-        std::memset(&m_buttons, 0, sizeof(m_buttons));
-        m_left_stick.SetData(SwitchAnalogStick::Center, SwitchAnalogStick::Center);
-        m_right_stick.SetData(SwitchAnalogStick::Center, SwitchAnalogStick::Center);
-        std::memset(&m_accel, 0, sizeof(m_accel));
-        std::memset(&m_gyro, 0, sizeof(m_gyro));
-        m_motion_packer->SetGyroSensitivity(GyroSensitivity_2000Dps);
-        m_motion_packer->SetAccelSensitivity(AccelSensitivity_8G);
+    void EmulatedSwitchController::Reset() {
+        m_buttons.Reset();
+        m_left_stick.Reset();
+        m_right_stick.Reset();
+        m_sixaxis_processor.Reset();
     }
 
-    void EmulatedSwitchController::UpdateControllerState(const bluetooth::HidReport *report) {
-        this->ProcessInputData(report);
+    Result EmulatedSwitchController::InjectInputReport(const u8 *report_buffer, size_t size) {
+        bluetooth::hid::report::WriteHidDataReport(m_address, report_buffer, size);
+        R_SUCCEED();
+    }
 
-        auto input_report = reinterpret_cast<SwitchInputReport *>(m_input_report.data);
-        input_report->id = m_input_report_mode;
-        input_report->timer = (input_report->timer + 1) & 0xff;
-        input_report->conn_info = (0 << 1) | m_ext_power;
-        input_report->battery = m_battery | m_charging;
-        input_report->buttons = m_buttons;
-        input_report->left_stick = m_left_stick;
-        input_report->right_stick = m_right_stick; 
-
-        m_motion_packer->PackData(&input_report->type0x30.motion_data, m_accel, m_gyro);
-
-        const SwitchMcuResponse empty_mcu_response = {
-          .command = McuCommand_EmptyAwaitingCmd,
-          .data = {},
-        };
-
+    size_t EmulatedSwitchController::FillInputReport(u8 *report_buffer, size_t size) {
         switch (m_input_report_mode) {
-            case 0x31:
-                m_motion_packer->PackData(&input_report->type0x31.motion_data, m_accel, m_gyro);
-                std::memcpy(&input_report->type0x31.mcu_response, &empty_mcu_response, sizeof(empty_mcu_response));
-                input_report->type0x31.crc = ComputeCrc8(&empty_mcu_response, sizeof(SwitchMcuResponse));
-                m_input_report.size = offsetof(SwitchInputReport, type0x31) + sizeof(input_report->type0x31);
-                break;
+            case SwitchHidReportId::BasicInputReport:
+                return this->FillBasicInputReport(report_buffer, size);
+            case SwitchHidReportId::McuInputReport:
+                return this->FillMcuInputReport(report_buffer, size);
+            case SwitchHidReportId::AttachmentInputReport:
+                return this->FillAttachmentInputReport(report_buffer, size);
+            case SwitchHidReportId::GenericInputReport:
+                return this->FillGenericInputReport(report_buffer, size);
             default:
-                m_motion_packer->PackData(&input_report->type0x30.motion_data, m_accel, m_gyro);
-                m_input_report.size = offsetof(SwitchInputReport, type0x30) + sizeof(input_report->type0x30);
-                break;
+                return this->FillBasicInputReport(report_buffer, size);
         }
     }
 
-    Result EmulatedSwitchController::HandleOutputDataReport(const bluetooth::HidReport *report) {
-        auto output_report = reinterpret_cast<const SwitchOutputReport *>(&report->data);
+    size_t EmulatedSwitchController::FillCommandInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidCommandInputReport)); AMS_UNUSED(size);
 
-        switch (output_report->id) {
-            case 0x01:
-                R_TRY(this->HandleRumbleData(&output_report->enc_motor_data));
-                R_TRY(this->HandleHidCommand(&output_report->type0x01.hid_command));
-                break;
-            case 0x10:
-                R_TRY(this->HandleRumbleData(&output_report->enc_motor_data));
-                break;
-            case 0x11:
-                R_TRY(this->HandleRumbleData(&output_report->enc_motor_data));
-                R_TRY(this->HandleMcuCommand(&output_report->type0x11.mcu_command));
-                break;
-            default:
-                break;
+        auto command_report = reinterpret_cast<SwitchHidCommandInputReport *>(report_buffer);
+        command_report->report_id          = SwitchHidReportId::CommandInputReport;
+        command_report->latency_timer      = m_latency_timer++;
+        command_report->power_info         = m_power_info.GetState();
+        command_report->buttons            = m_buttons.GetState();
+        command_report->left_analog_stick  = m_left_stick.GetState();
+        command_report->right_analog_stick = m_right_stick.GetState();
+        command_report->motor_status       = m_motor_status.GetState();
+
+        command_report->command_response = m_hid_command_processor.GetResponse();
+
+        return sizeof(SwitchHidCommandInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillMcuUpdateInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchMcuUpdateInputReport)); AMS_UNUSED(size);
+
+        auto mcu_update_report = reinterpret_cast<SwitchMcuUpdateInputReport *>(report_buffer);
+        mcu_update_report->report_id          = SwitchHidReportId::McuUpdateInputReport;
+        mcu_update_report->latency_timer      = m_latency_timer++;
+        mcu_update_report->power_info         = m_power_info.GetState();
+        mcu_update_report->buttons            = m_buttons.GetState();
+        mcu_update_report->left_analog_stick  = m_left_stick.GetState();
+        mcu_update_report->right_analog_stick = m_right_stick.GetState();
+        mcu_update_report->motor_status       = m_motor_status.GetState();
+
+        std::memset(&mcu_update_report->mcu_updata_data, 0, sizeof(mcu_update_report->mcu_updata_data));
+
+        return sizeof(SwitchMcuUpdateInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillBasicInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidBasicInputReport)); AMS_UNUSED(size);
+
+        auto basic_report = reinterpret_cast<SwitchHidBasicInputReport *>(report_buffer);
+        basic_report->report_id          = SwitchHidReportId::BasicInputReport;
+        basic_report->latency_timer      = m_latency_timer++;
+        basic_report->power_info         = m_power_info.GetState();
+        basic_report->buttons            = m_buttons.GetState();
+        basic_report->left_analog_stick  = m_left_stick.GetState();
+        basic_report->right_analog_stick = m_right_stick.GetState();
+        basic_report->motor_status       = m_motor_status.GetState();
+
+        basic_report->motion_data = m_sixaxis_processor.GetState();
+
+        return sizeof(SwitchHidBasicInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillMcuInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidMcuInputReport)); AMS_UNUSED(size);
+
+        auto mcu_report = reinterpret_cast<SwitchHidMcuInputReport *>(report_buffer);
+        mcu_report->report_id          = SwitchHidReportId::McuInputReport;
+        mcu_report->latency_timer      = m_latency_timer++;
+        mcu_report->power_info         = m_power_info.GetState();
+        mcu_report->buttons            = m_buttons.GetState();
+        mcu_report->left_analog_stick  = m_left_stick.GetState();
+        mcu_report->right_analog_stick = m_right_stick.GetState();
+        mcu_report->motor_status       = m_motor_status.GetState();
+
+        mcu_report->motion_data = m_sixaxis_processor.GetState();
+
+        std::memset(&mcu_report->mcu_data, 0, sizeof(mcu_report->mcu_data));
+
+        return sizeof(SwitchHidMcuInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillAttachmentInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidAttachmentInputReport)); AMS_UNUSED(size);
+
+        auto attachment_report = reinterpret_cast<SwitchHidAttachmentInputReport *>(report_buffer);
+        attachment_report->report_id          = SwitchHidReportId::AttachmentInputReport;
+        attachment_report->latency_timer      = m_latency_timer++;
+        attachment_report->power_info         = m_power_info.GetState();
+        attachment_report->buttons            = m_buttons.GetState();
+        attachment_report->left_analog_stick  = m_left_stick.GetState();
+        attachment_report->right_analog_stick = m_right_stick.GetState();
+        attachment_report->motor_status       = m_motor_status.GetState();
+
+        attachment_report->motion_data = m_sixaxis_processor.GetState();
+
+        std::memset(&attachment_report->attachment_data, 0, sizeof(attachment_report->attachment_data));
+
+        return sizeof(SwitchHidAttachmentInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillGenericInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidGenericInputReport)); AMS_UNUSED(size);
+
+        auto generic_report = reinterpret_cast<SwitchHidGenericInputReport *>(report_buffer);
+        generic_report->report_id = SwitchHidReportId::GenericInputReport;
+
+        // Todo: convert pad data to generic report format
+
+        return sizeof(SwitchHidGenericInputReport);
+    }
+
+    size_t EmulatedSwitchController::FillExtGripInputReport(u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchExtGripInputReport)); AMS_UNUSED(size);
+
+        auto ext_grip_report = reinterpret_cast<SwitchExtGripInputReport *>(report_buffer);
+        ext_grip_report->report_id = SwitchHidReportId::ExtGripInputReport;
+
+        ext_grip_report->command_response = m_ext_grip_command_processor.GetResponse();
+
+        return sizeof(SwitchExtGripInputReport);
+    }
+
+    Result EmulatedSwitchController::HandleOutputDataReport(const u8 *report_buffer, size_t size) {
+        auto report_id = static_cast<SwitchHidReportId>(report_buffer[0]);
+
+        switch (report_id) {
+            case SwitchHidReportId::CommandOutputReport:
+                R_RETURN(this->HandleCommandOutputReport(report_buffer, size));
+
+            case SwitchHidReportId::McuUpdateOutputReport:
+                R_RETURN(this->HandleMcuUpdateOutputReport(report_buffer, size));
+
+            case SwitchHidReportId::BasicOutputReport:
+                R_RETURN(this->HandleBasicOutputReport(report_buffer, size));
+
+            case SwitchHidReportId::McuOutputReport:
+                R_RETURN(this->HandleMcuOutputReport(report_buffer, size));
+
+            case SwitchHidReportId::AttachmentOutputReport:
+                R_RETURN(this->HandleAttachmentOutputReport(report_buffer, size));
+
+            case SwitchHidReportId::ExtGripOutputReport:
+                R_RETURN(this->HandleExtGripOutputReport(report_buffer, size));
+
+            AMS_UNREACHABLE_DEFAULT_CASE();
         }
+    }
+
+    Result EmulatedSwitchController::HandleCommandOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidCommandOutputReport));
+
+        auto command_report = reinterpret_cast<const SwitchHidCommandOutputReport *>(report_buffer);
+        m_vibration_processor.ProcessMotorData(&command_report->motor_data);
+        m_hid_command_processor.ProcessCommand(&command_report->command);
+
+        u8 input_report[sizeof(SwitchHidCommandInputReport)];
+        size = this->FillCommandInputReport(input_report, sizeof(input_report));
+        R_TRY(this->InjectInputReport(input_report, size));
 
         R_SUCCEED();
     }
 
-    Result EmulatedSwitchController::HandleRumbleData(const SwitchEncodedMotorData *encoded_motor_data) {
-        if (m_enable_rumble) {
-            SwitchMotorData motor_data;
-            if (m_rumble_handler.GetDecodedValues(encoded_motor_data, &motor_data)) {
-                R_TRY(this->SetVibration(&motor_data));
-            }
-        }
+    Result EmulatedSwitchController::HandleMcuUpdateOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidMcuUpdateOutputReport));
+
+        auto mcu_update_report = reinterpret_cast<const SwitchHidMcuUpdateOutputReport *>(report_buffer);
+        m_vibration_processor.ProcessMotorData(&mcu_update_report->motor_data);
+        // Todo: process mcu update data
+
+        u8 input_report[sizeof(SwitchMcuUpdateInputReport)];
+        size = this->FillAttachmentInputReport(input_report, sizeof(input_report));
+        R_TRY(this->InjectInputReport(input_report, size));
 
         R_SUCCEED();
     }
 
-    Result EmulatedSwitchController::HandleHidCommand(const SwitchHidCommand *command) {
-        switch (command->id) {
-            case HidCommand_GetDeviceInfo:
-                R_TRY(this->HandleHidCommandGetDeviceInfo(command));
-                break;
-            case HidCommand_SetDataFormat:
-                R_TRY(this->HandleHidCommandSetDataFormat(command));
-                break;
-            case HidCommand_LRButtonDetection:
-                R_TRY(this->HandleHidCommandLRButtonDetection(command));
-                break;
-            case HidCommand_ClearPairingInfo:
-                R_TRY(this->HandleHidCommandClearPairingInfo(command));
-                break;
-            case HidCommand_Shipment:
-                R_TRY(this->HandleHidCommandShipment(command));
-                break;
-            case HidCommand_SerialFlashRead:
-                R_TRY(this->HandleHidCommandSerialFlashRead(command));
-                break;
-            case HidCommand_SerialFlashWrite:
-                R_TRY(this->HandleHidCommandSerialFlashWrite(command));
-                break;
-            case HidCommand_SerialFlashSectorErase:
-                R_TRY(this->HandleHidCommandSerialFlashSectorErase(command));
-                break;
-            case HidCommand_McuWrite:
-                R_TRY(this->HandleHidCommandMcuWrite(command));
-                break;
-            case HidCommand_McuResume:
-                R_TRY(this->HandleHidCommandMcuResume(command));
-                break;
-            case HidCommand_McuPollingEnable:
-                R_TRY(this->HandleHidCommandMcuPollingEnable(command));
-                break;
-            case HidCommand_McuPollingDisable:
-                R_TRY(this->HandleHidCommandMcuPollingDisable(command));
-                break;
-            case HidCommand_SetIndicatorLed:
-                R_TRY(this->HandleHidCommandSetIndicatorLed(command));
-                break;
-            case HidCommand_GetIndicatorLed:
-                R_TRY(this->HandleHidCommandGetIndicatorLed(command));
-                break;
-            case HidCommand_SetNotificationLed:
-                R_TRY(this->HandleHidCommandSetNotificationLed(command));
-                break;
-            case HidCommand_SensorSleep:
-                R_TRY(this->HandleHidCommandSensorSleep(command));
-                break;
-            case HidCommand_SensorConfig:
-                R_TRY(this->HandleHidCommandSensorConfig(command));
-                break;
-            case HidCommand_MotorEnable:
-                R_TRY(this->HandleHidCommandMotorEnable(command));
-                break;
-            default:
-                const SwitchHidCommandResponse response = {
-                    .ack = 0x80,
-                    .id = command->id,
-                    .data = {
-                        .raw = { 0x03 }
-                    }
-                };
+    Result EmulatedSwitchController::HandleBasicOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidBasicOutputReport)); AMS_UNUSED(size);
 
-                R_TRY(this->FakeHidCommandResponse(&response));
-                break;
-        }
+        auto basic_report = reinterpret_cast<const SwitchHidBasicOutputReport *>(report_buffer);
+        m_vibration_processor.ProcessMotorData(&basic_report->motor_data);
 
         R_SUCCEED();
     }
 
-    Result EmulatedSwitchController::HandleHidCommandGetDeviceInfo(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x82,
-            .id = command->id,
-            .data = {
-                .get_device_info = {
-                    .fw_ver = {
-                        .major = 0x04,
-                        .minor = 0x21
-                    },
-                    .type = 0x06, // 0x03,
-                    ._unk0 = 0x02,
-                    .address = m_address,
-                    .sensor_type = SensorType_LSM6DS3H,
-                    .format_version = 0x02
-                }
-            }
-        };
+    Result EmulatedSwitchController::HandleMcuOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidMcuOutputReport));
 
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
+        auto mcu_report = reinterpret_cast<const SwitchHidMcuOutputReport *>(report_buffer);
+        m_vibration_processor.ProcessMotorData(&mcu_report->motor_data);
+        // m_mcu_command_processor.ProcessCommand(command);
 
-    Result EmulatedSwitchController::HandleHidCommandSetDataFormat(const SwitchHidCommand *command) {
-        m_input_report_mode = command->set_data_format.id;
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandLRButtonDetection(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x83,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandClearPairingInfo(const SwitchHidCommand *command) {
-        R_TRY(m_virtual_memory.SectorErase(0x2000));
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandShipment(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .shipment = {
-                    .enabled = false
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSerialFlashRead(const SwitchHidCommand *command) {
-        // These are read from official Pro Controller
-        // @ 0x00006000: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff                            <= Serial
-        // @ 0x00006050: 32 32 32 ff ff ff ff ff ff ff ff ff                                        <= RGB colours (body, buttons, left grip, right grip)
-        // @ 0x00006080: 50 fd 00 00 c6 0f 0f 30 61 ae 90 d9 d4 14 54 41 15 54 c7 79 9c 33 36 63    <= Factory Sensor and Stick device parameters
-        // @ 0x00006098: 0f 30 61 ae 90 d9 d4 14 54 41 15 54 c7 79 9c 33 36 63                      <= Stick device parameters 2. Normally the same with 1, even in Pro Contr.
-        // @ 0x00008010: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    <= User Analog sticks calibration
-        // @ 0x0000603d: e6 a5 67 1a 58 78 50 56 60 1a f8 7f 20 c6 63 d5 15 5e ff 32 32 32 ff ff ff <= Analog stick factory calibration + face/button colours
-        // @ 0x00006020: 64 ff 33 00 b8 01 00 40 00 40 00 40 17 00 d7 ff bd ff 3b 34 3b 34 3b 34    <= 6-Axis motion sensor Factory calibration
-        auto read_addr = command->serial_flash_read.address;
-        auto read_size = command->serial_flash_read.size;
-
-        SwitchHidCommandResponse response = {
-            .ack = 0x90,
-            .id = command->id,
-            .data = {
-                .serial_flash_read = {
-                    .address = read_addr,
-                    .size = read_size
-                }
-            }
-        };
-
-        R_TRY(m_virtual_memory.Read(read_addr, response.data.serial_flash_read.data, read_size));
-
-        if (read_addr == 0x6050) {
-            if (ams::mitm::GetSystemLanguage() == 10) {
-                u8 data[] = {0xff, 0xd7, 0x00, 0x00, 0x57, 0xb7, 0x00, 0x57, 0xb7, 0x00, 0x57, 0xb7};
-                std::memcpy(response.data.serial_flash_read.data, data, sizeof(data));
-            }
-        }
-
-        return this->FakeHidCommandResponse(&response);
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSerialFlashWrite(const SwitchHidCommand *command) {
-        auto write_addr = command->serial_flash_write.address;
-        auto write_size = command->serial_flash_write.size;
-        auto write_data = command->serial_flash_write.data;
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .serial_flash_write = {
-                    .status = m_virtual_memory.Write(write_addr, write_data, write_size).IsFailure()
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSerialFlashSectorErase(const SwitchHidCommand *command) {
-        auto erase_addr = command->serial_flash_sector_erase.address;
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .serial_flash_sector_erase = {
-                    .status = m_virtual_memory.SectorErase(erase_addr).IsFailure()
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandMcuPollingEnable(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .raw = { 0x00 }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandMcuPollingDisable(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .raw = { 0x00 }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandMcuWrite(const SwitchHidCommand *command) {
-        switch (command->mcu_write.command){
-            case McuCommand_ConfigureMcu:
-                return this->HandleHidCommandConfigureMcu(command);
-            default:
-                break;
-        }
-    
-        const SwitchHidCommandResponse response = {
-            .ack = 0xa0,
-            .id = command->id,
-            .data = {
-                .raw = {// This looks a lot like mcu get status
-                    0x01, 0x00, 0xff, 0x00, 0x03, 0x00, 0x05, 0x01,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x5c
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-    
-    Result EmulatedSwitchController::HandleHidCommandConfigureMcu(const SwitchHidCommand *command) {
-        if (m_mcu_mode == McuMode_Suspended || m_mcu_mode == McuMode_Busy) {
-          const SwitchHidCommandResponse response = {
-              .ack = 0xa0,
-              .id = command->id,
-              .data = {
-                  .raw = {// This looks a lot like mcu get status
-                      0x01, 0x00, 0xff, 0x00, 0x08, 0x00, 0x1b, 0x06,
-                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                      0x00, 0xf6
-                  }
-              }
-          };
-
-          R_RETURN(this->FakeHidCommandResponse(&response));
-        }
-        
-        if (m_mcu_mode == McuMode_Standby){
-            m_mcu_mode = command->mcu_write.data.configure_mcu.mode;
-        }
-
-    
-        const SwitchHidCommandResponse response = {
-            .ack = 0xa0,
-            .id = command->id,
-            .data = {
-                .raw = {// This looks a lot like mcu get status
-                    0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x1b, 0x01,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0xef
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandMcuResume(const SwitchHidCommand *command) {
-        if(command->mcu_resume.enabled && m_mcu_mode == McuMode_Suspended){
-          m_mcu_mode = McuMode_Standby;
-        }
-
-        if (!command->mcu_resume.enabled){
-          m_mcu_mode = McuMode_Suspended;
-        }
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSetIndicatorLed(const SwitchHidCommand *command) {
-        m_led_pattern = command->set_indicator_led.leds;
-        R_TRY(this->SetPlayerLed(m_led_pattern));
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandGetIndicatorLed(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id,
-            .data = {
-                .get_indicator_led = {
-                    .leds = m_led_pattern
-                }
-            }
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSetNotificationLed(const SwitchHidCommand *command) {
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSensorSleep(const SwitchHidCommand* command) {
-        m_enable_motion = mitm::GetGlobalConfig()->general.enable_motion;
-
-        GyroSensitivity gyro_sensitivity = m_motion_packer->GetGyroSensitivity();
-        AccelSensitivity accel_sensitivity = m_motion_packer->GetAccelSensitivity();
-
-        if (m_enable_motion) {
-            switch (command->sensor_sleep.mode) {
-                case SensorSleepType_Active:
-                    m_motion_packer = std::make_unique<StandardMotionPacker>();
-                    break;
-
-                case SensorSleepType_ActiveDscaleMode1:
-                case SensorSleepType_ActiveDscaleMode2:
-                case SensorSleepType_ActiveDscaleMode3:
-                case SensorSleepType_ActiveDscaleMode4:
-                    m_motion_packer = std::make_unique<QuaternionMotionPacker>();
-                    break;
-
-                default:
-                    m_motion_packer = std::make_unique<NullMotionPacker>();
-                    break;
-            }
-        } else {
-            m_motion_packer = std::make_unique<NullMotionPacker>();
-        }
-
-        m_motion_packer->SetGyroSensitivity(gyro_sensitivity);
-        m_motion_packer->SetAccelSensitivity(accel_sensitivity);
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandSensorConfig(const SwitchHidCommand *command) {
-        m_motion_packer->SetGyroSensitivity(command->sensor_config.gyro_sensitivity);
-        m_motion_packer->SetAccelSensitivity(command->sensor_config.accel_sensitivity);
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::HandleHidCommandMotorEnable(const SwitchHidCommand *command) {
-        m_enable_rumble = mitm::GetGlobalConfig()->general.enable_rumble & command->motor_enable.enabled;
-
-        const SwitchHidCommandResponse response = {
-            .ack = 0x80,
-            .id = command->id
-        };
-
-        R_RETURN(this->FakeHidCommandResponse(&response));
-    }
-
-    Result EmulatedSwitchController::FakeHidCommandResponse(const SwitchHidCommandResponse *response) {
-        std::scoped_lock lk(m_input_mutex);
-
-        auto input_report = reinterpret_cast<SwitchInputReport *>(m_input_report.data);
-        input_report->id = 0x21;
-        input_report->timer = (input_report->timer + 1) & 0xff;
-        input_report->conn_info = (0 << 1) | m_ext_power;
-        input_report->battery = m_battery | m_charging;
-        input_report->buttons = m_buttons;
-        input_report->left_stick = m_left_stick;
-        input_report->right_stick = m_right_stick;
-        input_report->vibrator = 0;
-
-        std::memcpy(&input_report->type0x21.hid_command_response, response, sizeof(SwitchHidCommandResponse));
-        m_input_report.size = offsetof(SwitchInputReport, type0x21) + sizeof(input_report->type0x21);
-
-        // Write a fake response into the report buffer
-        R_RETURN(bluetooth::hid::report::WriteHidDataReport(m_address, &m_input_report));
-    }
-
-    Result EmulatedSwitchController::HandleMcuCommand(const SwitchMcuCommand *command) {
-        switch (command->sub_command) {
-            case McuSubCommand_SetMcuMode:
-                R_TRY(this->HandleMcuCommandSetMcuMode());
-                break;
-            case McuSubCommand_GetMcuMode:
-                R_TRY(this->HandleMcuCommandGetMcuMode());
-                break;
-            case McuSubCommand_ReadDeviceMode:
-                R_TRY(this->HandleMcuCommandReadDeviceMode());
-                break;
-            case McuSubCommand_WriteDeviceRegisters:
-                //R_TRY(this->HandleMcuCommandWriteDeviceRegisters(command));
-                break;
-            default: {
-                // Send device not ready response for now
-                const SwitchMcuResponse response = {
-                    .command = McuCommand_EmptyAwaitingCmd,
-                    .data = {
-                        .get_mcu_mode = {
-                            .mode = m_mcu_mode
-                        }
-                    }
-                };
-
-                R_RETURN(this->FakeMcuResponse(&response));
-            }
-        }
+        u8 input_report[sizeof(SwitchHidMcuInputReport)];
+        size = this->FillMcuInputReport(input_report, sizeof(input_report));
+        R_TRY(this->InjectInputReport(input_report, size));
 
         R_SUCCEED();
     }
 
-    Result EmulatedSwitchController::HandleMcuCommandSetMcuMode() {
-        const SwitchMcuResponse response = {
-            .command = McuCommand_EmptyAwaitingCmd
-        };
+    Result EmulatedSwitchController::HandleAttachmentOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchHidAttachmentOutputReport));
 
-        R_RETURN(this->FakeMcuResponse(&response));
+        auto attachment_report = reinterpret_cast<const SwitchHidAttachmentOutputReport *>(report_buffer);
+        m_vibration_processor.ProcessMotorData(&attachment_report->motor_data);
+        // Todo: process attachment data
+
+        u8 input_report[sizeof(SwitchHidAttachmentInputReport)];
+        size = this->FillAttachmentInputReport(input_report, sizeof(input_report));
+        R_TRY(this->InjectInputReport(input_report, size));
+
+        R_SUCCEED();
     }
 
-    Result EmulatedSwitchController::HandleMcuCommandGetMcuMode() {
-        const SwitchMcuResponse response = {
-            .command = McuCommand_StateReport,
-            .data = {
-                .get_mcu_mode = {
-                    .unknown_1 = 0x08,
-                    .unknown_2 = 0x1b,
-                    .mode = m_mcu_mode
-                }
-            }
-        };
+    Result EmulatedSwitchController::HandleExtGripOutputReport(const u8 *report_buffer, size_t size) {
+        AMS_ASSERT(size >= sizeof(SwitchExtGripOutputReport));
 
-        R_RETURN(this->FakeMcuResponse(&response));
-    }
-    
-    Result EmulatedSwitchController::HandleMcuCommandReadDeviceMode() {
-        const SwitchMcuResponse response = {
-            .command = McuCommand_NfcState,
-            .data = {
-                .read_device_mode = {
-                    .unknown_1 = 0x05,
-                    .unknown_2 = 0x09,
-                    .unknown_3 = 0x31,
-                    .is_ready = 0x01
-                }
-            }
-        };
+        auto ext_grip_report = reinterpret_cast<const SwitchExtGripOutputReport *>(report_buffer);
+        m_ext_grip_command_processor.ProcessCommand(&ext_grip_report->command);
 
-        R_RETURN(this->FakeMcuResponse(&response));
-    }
+        u8 input_report[sizeof(SwitchExtGripInputReport)];
+        size = this->FillExtGripInputReport(input_report, sizeof(input_report));
+        R_TRY(this->InjectInputReport(input_report, size));
 
-    Result EmulatedSwitchController::FakeMcuResponse(const SwitchMcuResponse *response) {
-        std::scoped_lock lk(m_input_mutex);
-
-        auto input_report = reinterpret_cast<SwitchInputReport *>(m_input_report.data);
-        input_report->id = 0x31;
-        input_report->timer = (input_report->timer + 1) & 0xff;
-        input_report->conn_info = (0 << 1) | m_ext_power;
-        input_report->battery = m_battery | m_charging;
-        input_report->buttons = m_buttons;
-        input_report->left_stick = m_left_stick;
-        input_report->right_stick = m_right_stick;
-        input_report->vibrator = 0;
-
-        m_motion_packer->PackData(&input_report->type0x31.motion_data, m_accel, m_gyro);
-        std::memcpy(&input_report->type0x31.mcu_response, response, sizeof(SwitchMcuResponse));
-        input_report->type0x31.crc = ComputeCrc8(response, sizeof(SwitchMcuResponse));
-        m_input_report.size = offsetof(SwitchInputReport, type0x31) + sizeof(input_report->type0x31);
-
-        // Write a fake response into the report buffer
-        R_RETURN(bluetooth::hid::report::WriteHidDataReport(m_address, &m_input_report));
+        R_SUCCEED();
     }
 
 }

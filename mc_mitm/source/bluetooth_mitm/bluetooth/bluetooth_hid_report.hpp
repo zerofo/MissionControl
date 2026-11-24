@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -40,9 +40,9 @@ namespace ams::bluetooth::hid::report {
     Result MapRemoteSharedMemory(os::NativeHandle handle);
     Result InitializeReportBuffer();
 
-    Result WriteHidDataReport(const bluetooth::Address address, const bluetooth::HidReport *report);
-    Result WriteHidSetReport(const bluetooth::Address address, u32 status);
-    Result WriteHidGetReport(const bluetooth::Address address, const bluetooth::HidReport *report);
+    void WriteHidDataReport(bluetooth::Address address, const u8 *report_buffer, size_t size);
+    void WriteHidSetReport(bluetooth::Address address, u32 status);
+    void WriteHidGetReport(bluetooth::Address address, const u8 *report_buffer, size_t size);
 
     Result GetEventInfo(bluetooth::HidEventType *type, void *buffer, size_t size);
     void HandleEvent();

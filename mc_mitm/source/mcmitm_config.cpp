@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -27,16 +27,19 @@ namespace ams::mitm {
         constinit MissionControlConfig g_global_config = {
             .general = {
                 .enable_rumble = true,
-                .enable_motion = true
+                .enable_motion = true,
+                .enable_button_combos = true
             },
             .misc = {
                 .analog_trigger_activation_threshold = 50,
+                .dualshock3_enable_usb_pairing = true,
                 .dualshock3_led_mode = 0,
                 .dualshock4_polling_rate = 8,
                 .dualshock4_lightbar_brightness = 5,
                 .dualsense_lightbar_brightness = 5,
                 .dualsense_enable_player_leds = true,
-                .dualsense_vibration_intensity = 4
+                .dualsense_vibration_intensity = 4,
+                .dualsense_adaptive_trigger_travel = 0
             }
         };
 
@@ -85,6 +88,8 @@ namespace ams::mitm {
                     ParseBoolean(value, &config->general.enable_rumble);
                 } else if (strcasecmp(name, "enable_motion") == 0) {
                     ParseBoolean(value, &config->general.enable_motion);
+                } else if (strcasecmp(name, "enable_button_combos") == 0) {
+                    ParseBoolean(value, &config->general.enable_button_combos);
                 }
             } else if (strcasecmp(section, "bluetooth") == 0) {
                 if (strcasecmp(name, "host_name") == 0) {
@@ -95,6 +100,8 @@ namespace ams::mitm {
             } else if (strcasecmp(section, "misc") == 0) {
                 if (strcasecmp(name, "analog_trigger_activation_threshold") == 0) {
                     ParseInt(value, &config->misc.analog_trigger_activation_threshold, 0, 100);
+                } else if (strcasecmp(name, "dualshock3_enable_usb_pairing") == 0) {
+                    ParseBoolean(value, &config->misc.dualshock3_enable_usb_pairing);
                 } else if (strcasecmp(name, "dualshock3_led_mode") == 0) {
                     ParseInt(value, &config->misc.dualshock3_led_mode, 0, 2);
                 } else if (strcasecmp(name, "dualshock4_polling_rate") == 0) {
@@ -107,6 +114,8 @@ namespace ams::mitm {
                     ParseBoolean(value, &config->misc.dualsense_enable_player_leds);
                 } else if (strcasecmp(name, "dualsense_vibration_intensity") == 0) {
                     ParseInt(value, &config->misc.dualsense_vibration_intensity, 1, 8);
+                } else if (strcasecmp(name, "dualsense_adaptive_trigger_travel") == 0) {
+                    ParseInt(value, &config->misc.dualsense_adaptive_trigger_travel, 0, 100);
                 }
             } else {
                 return 0;

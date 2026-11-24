@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,18 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum AtGamesDPadDirection {
-        AtGamesDPad_N,
-        AtGamesDPad_NE,
-        AtGamesDPad_E,
-        AtGamesDPad_SE,
-        AtGamesDPad_S,
-        AtGamesDPad_SW,
-        AtGamesDPad_W,
-        AtGamesDPad_NW,
-        AtGamesDPad_Released = 0x08
-    };
 
     struct AtGamesInputReport0x01 {
         u8 rewind        : 1;
@@ -49,7 +37,7 @@ namespace ams::controller {
         u8               : 0;
 
         u8 unk1[2];
-        u8 dpad;
+        DirectionalPadType<0, 8> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick; // Only right stick y-axis is used for plunger
         u8 unk2;
@@ -70,16 +58,14 @@ namespace ams::controller {
                 {0x1d6b, 0x0246},   // AtGames Legends Pinball
             };
 
-            AtGamesController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id), m_arcadepanel(false) { }
+            AtGamesController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id), m_arcadepanel(false) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const AtGamesReportData *src);
         
             bool m_arcadepanel;
-
     };
 
 }

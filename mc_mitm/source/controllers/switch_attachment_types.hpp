@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,16 +14,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #pragma once
-#include <switch.h>
+#include <stratosphere.hpp>
 
 namespace ams::controller {
 
-    constexpr u8 convert_battery_100(u8 level) {
-        return level ? (((level - 1) / 25) + 1) << 1 : 0;
-    }
+    struct SwitchAttachmentDataIn {
+        u8 data[0x139];
+    };
+    static_assert(sizeof(SwitchAttachmentDataIn) == 0x139);
 
-    constexpr u8 convert_battery_255(u8 level) {
-        return level ? ((level / 64) + 1) << 1 : 0;
-    }
+    struct SwitchAttachmentDataOut {
+        u8 data[0x26];
+    };
+    static_assert(sizeof(SwitchAttachmentDataOut) == 0x26);
 
 }

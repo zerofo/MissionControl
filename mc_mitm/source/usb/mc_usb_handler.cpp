@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -14,6 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "mc_usb_handler.hpp"
+#include "../mcmitm_config.hpp"
 #include "../controllers/dualshock3_controller.hpp"
 
 namespace ams::usb {
@@ -23,7 +24,7 @@ namespace ams::usb {
         Result GetOldestPairedDeviceAddress(bluetooth::Address *out_address) {
             if (hos::GetVersion() >= hos::Version_13_0_0) {
                 s32 total_out;
-                BtmDeviceInfoV13 device_info[10];
+                BtmDeviceInfo device_info[10];
                 R_TRY(btmGetDeviceInfo(BtmProfile_Hid, device_info, 10, &total_out));
 
                 *out_address = device_info[0].addr;
@@ -100,20 +101,24 @@ namespace ams::usb {
     }
 
     void Launch() {
-        R_ABORT_UNLESS(os::CreateThread(&g_thread,
-            UsbThreadFunction,
-            nullptr,
-            g_thread_stack,
-            ThreadStackSize,
-            ThreadPriority
-        ));
+        if (mitm::GetGlobalConfig()->misc.dualshock3_enable_usb_pairing) {
+            R_ABORT_UNLESS(os::CreateThread(&g_thread,
+                UsbThreadFunction,
+                nullptr,
+                g_thread_stack,
+                ThreadStackSize,
+                ThreadPriority
+            ));
 
-        os::SetThreadNamePointer(&g_thread, "mc::UsbThread");
-        os::StartThread(&g_thread);
+            os::SetThreadNamePointer(&g_thread, "mc::UsbThread");
+            os::StartThread(&g_thread);
+        }
     }
 
     void WaitFinished() {
-        os::WaitThread(&g_thread);
+        if (mitm::GetGlobalConfig()->misc.dualshock3_enable_usb_pairing) {
+            os::WaitThread(&g_thread);
+        }
     }
 
 }

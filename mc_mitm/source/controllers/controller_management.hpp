@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -43,6 +43,7 @@
 #include "betop_controller.hpp"
 #include "atari_controller.hpp"
 #include "bionik_controller.hpp"
+#include "amazon_controller.hpp"
 
 namespace ams::controller {
 
@@ -77,12 +78,13 @@ namespace ams::controller {
         ControllerType_Betop,
         ControllerType_Atari,
         ControllerType_Bionik,
+        ControllerType_Amazon,
         ControllerType_Unknown,
     };
 
     class UnknownController : public EmulatedSwitchController {
         public:
-            UnknownController(const bluetooth::Address *address, HardwareID id)
+            UnknownController(bluetooth::Address address, HardwareID id)
             : EmulatedSwitchController(address, id) { }
     };
 
@@ -90,8 +92,8 @@ namespace ams::controller {
     bool IsAllowedDeviceClass(const bluetooth::DeviceClass *cod);
     bool IsOfficialSwitchControllerName(const std::string& name);
 
-    void AttachHandler(const bluetooth::Address *address);
-    void RemoveHandler(const bluetooth::Address *address);
-    std::shared_ptr<SwitchController> LocateHandler(const bluetooth::Address *address);
+    void AttachHandler(bluetooth::Address address);
+    void RemoveHandler(bluetooth::Address address);
+    std::shared_ptr<SwitchController> LocateHandler(bluetooth::Address address);
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,20 +30,30 @@ namespace ams::controller {
             Dualshock3LedMode_Hybrid = 2,
         };
 
+        constexpr SwitchBatteryLevel BatteryLookup[] = {
+            SwitchBatteryLevel::Critical,
+            SwitchBatteryLevel::Low,
+            SwitchBatteryLevel::Medium,
+            SwitchBatteryLevel::Full,
+            SwitchBatteryLevel::Full,
+        };
+
         constexpr const char Ds3DeviceName[] = "PLAYSTATION(R)3 Controller";
         constexpr u16 Ds3VendorId = 0x054c;
         constexpr u16 Ds3ProductId = 0x0268;
 
-        constexpr u8 TriggerMax = UINT8_MAX;
         constexpr float AccelScaleFactor = 1 / 113.0f;
 
-        constinit const u8 EnablePayload[] = { 0xf4, 0x42, 0x03, 0x00, 0x00 };
-        constinit const u8 LedConfig[] = { 0xff, 0x27, 0x10, 0x00, 0x32 };
-        constinit const u8 PlayerLedPatterns[] = { 0b1000, 0b1100, 0b1110, 0b1111, 0b1001, 0b0101, 0b1101, 0b0110 };
+        constexpr u8 EnablePayload[] = { 0xf4, 0x42, 0x03, 0x00, 0x00 };
+        constexpr u8 LedConfig[]     = { 0xff, 0x27, 0x10, 0x00, 0x32 };
+
+        constexpr u8 SwitchPlayerLedPatterns[] = { 0b0000, 0b1000, 0b1100, 0b1110, 0b1111, 0b1001, 0b0101, 0b1101, 0b0110 };
+        constexpr u8 Ps3PlayerLedPatterns[]    = { 0b0000, 0b0001, 0b0010, 0b0100, 0b1000, 0b1110, 0b1101, 0b1011, 0b0111 };
+        constexpr u8 HybridPlayerLedPatterns[] = { 0b0000, 0b0001, 0b0011, 0b0111, 0b1111, 0b1001, 0b1010, 0b1011, 0b0110 };
 
         alignas(os::MemoryPageSize) constinit u8 g_usb_buffer[0x1000];
 
-        constinit const UsbHsInterfaceFilter g_interface_filter = {
+        constexpr UsbHsInterfaceFilter g_interface_filter = {
             .Flags = UsbHsInterfaceFilterFlags_idVendor | UsbHsInterfaceFilterFlags_idProduct | UsbHsInterfaceFilterFlags_bInterfaceClass,
             .idVendor = Ds3VendorId,
             .idProduct = Ds3ProductId,
@@ -203,20 +213,19 @@ namespace ams::controller {
         R_RETURN(this->PushRumbleLedState());
     }
 
-    Result Dualshock3Controller::SetPlayerLed(u8 led_mask) {
-        u8 player_index;
-        R_TRY(LedsMaskToPlayerNumber(led_mask, &player_index));
+    Result Dualshock3Controller::SetPlayerLed(SwitchPlayerNumber player_number) {
+        u8 player_index = static_cast<u8>(player_number);
 
         auto config = mitm::GetGlobalConfig();
         switch(config->misc.dualshock3_led_mode) {
             case Dualshock3LedMode_Switch:
-                m_led_mask = PlayerLedPatterns[player_index];
+                m_led_mask = SwitchPlayerLedPatterns[player_index];
                 break;
             case Dualshock3LedMode_Ps3:
-                m_led_mask = player_index < 4 ? 1 << player_index : ~(1 << player_index) & 0x0f;
+                m_led_mask = Ps3PlayerLedPatterns[player_index];
                 break;
             case Dualshock3LedMode_Hybrid:
-                m_led_mask = led_mask;
+                m_led_mask = HybridPlayerLedPatterns[player_index];;
                 break;
             default:
                 break;
@@ -225,67 +234,88 @@ namespace ams::controller {
         R_RETURN(this->PushRumbleLedState());
     }
 
-    void Dualshock3Controller::ProcessInputData(const bluetooth::HidReport *report) {
-        auto ds3_report = reinterpret_cast<const Dualshock3ReportData *>(&report->data);
+    void Dualshock3Controller::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const Dualshock3ReportData *>(report_buffer);
 
-        switch(ds3_report->id) {
+        switch(report->id) {
             case 0x01:
-                this->MapInputReport0x01(ds3_report); break;
+                this->MapInputReport0x01(report); break;
             default:
                 break;
         }
     }
 
     void Dualshock3Controller::MapInputReport0x01(const Dualshock3ReportData *src) {
-        m_charging = src->input0x01.charge == 0x02;
-        m_battery = std::clamp<u8>(src->input0x01.battery, 0, 4) * 2;
-
-        // Workaround for controller reporting battery empty and being disconnected under certain conditions
-        if (m_battery == 0) {
-            m_battery = 1;
+        bool powered;
+        bool charging;
+        SwitchBatteryLevel battery_level;
+        if (src->input0x01.battery_level == 0x00 || src->input0x01.battery_level == 0xEE) {
+            powered = true;
+            charging = true;
+            battery_level = SwitchBatteryLevel::Full;
+        } else {
+            powered = false;
+            charging = false;
+            battery_level = BatteryLookup[std::clamp<u8>(src->input0x01.battery_level - 1, 0, sizeof(BatteryLookup) - 1)];
         }
+        m_power_info.SetPowered(powered);
+        m_power_info.SetCharging(charging);
+        m_power_info.SetBatteryLevel(battery_level);
 
-        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
-        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
+        auto left_trigger  = AnalogTrigger(src->input0x01.left_trigger);
+        auto right_trigger = AnalogTrigger(src->input0x01.right_trigger);
 
-        m_buttons.dpad_down  = src->input0x01.buttons.dpad_down;
-        m_buttons.dpad_up    = src->input0x01.buttons.dpad_up;
-        m_buttons.dpad_right = src->input0x01.buttons.dpad_right;
-        m_buttons.dpad_left  = src->input0x01.buttons.dpad_left;
+        m_left_stick.SetValuesFrom(
+            src->input0x01.left_stick.GetX(),
+            src->input0x01.left_stick.GetYInverted()
+        );
 
-        m_buttons.A = src->input0x01.buttons.circle;
-        m_buttons.B = src->input0x01.buttons.cross;
-        m_buttons.X = src->input0x01.buttons.triangle;
-        m_buttons.Y = src->input0x01.buttons.square;
+        m_right_stick.SetValuesFrom(
+            src->input0x01.right_stick.GetX(),
+            src->input0x01.right_stick.GetYInverted()
+        );
 
-        m_buttons.R  = src->input0x01.buttons.R1;
-        m_buttons.ZR = src->input0x01.right_trigger > (m_trigger_threshold * TriggerMax);
-        m_buttons.L  = src->input0x01.buttons.L1;
-        m_buttons.ZL = src->input0x01.left_trigger  > (m_trigger_threshold * TriggerMax);
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,   src->input0x01.buttons.dpad_down);
+        button_state.Assign(SwitchButton::Up,     src->input0x01.buttons.dpad_up);
+        button_state.Assign(SwitchButton::Right,  src->input0x01.buttons.dpad_right);
+        button_state.Assign(SwitchButton::Left,   src->input0x01.buttons.dpad_left);
+        button_state.Assign(SwitchButton::A,      src->input0x01.buttons.circle);
+        button_state.Assign(SwitchButton::B,      src->input0x01.buttons.cross);
+        button_state.Assign(SwitchButton::X,      src->input0x01.buttons.triangle);
+        button_state.Assign(SwitchButton::Y,      src->input0x01.buttons.square);
+        button_state.Assign(SwitchButton::R,      src->input0x01.buttons.R1);
+        button_state.Assign(SwitchButton::L,      src->input0x01.buttons.L1);
+        button_state.Assign(SwitchButton::ZR,     right_trigger.GetNormalizedValue() > m_trigger_threshold);
+        button_state.Assign(SwitchButton::ZL,     left_trigger.GetNormalizedValue()  > m_trigger_threshold);
+        button_state.Assign(SwitchButton::Minus,  src->input0x01.buttons.select);
+        button_state.Assign(SwitchButton::Plus,   src->input0x01.buttons.start);
+        button_state.Assign(SwitchButton::StickL, src->input0x01.buttons.L3);
+        button_state.Assign(SwitchButton::StickR, src->input0x01.buttons.R3);
+        button_state.Assign(SwitchButton::Home,   src->input0x01.buttons.ps);
+        m_buttons = button_state;
 
-        m_buttons.minus = src->input0x01.buttons.select;
-        m_buttons.plus  = src->input0x01.buttons.start;
+        utils::Vec3d<float> accel = {
+            .x = -AccelScaleFactor * (511 - util::SwapEndian(src->input0x01.accel_y)),
+            .y = -AccelScaleFactor * (util::SwapEndian(src->input0x01.accel_x) - 511),
+            .z =  AccelScaleFactor * (511 - util::SwapEndian(src->input0x01.accel_z))
+        };
 
-        m_buttons.lstick_press = src->input0x01.buttons.L3;
-        m_buttons.rstick_press = src->input0x01.buttons.R3;
+        utils::Vec3d<float> gyro = {
+            .x = 0.0f,
+            .y = 0.0f,
+            .z = 0.0f
+        };
 
-        m_buttons.home = src->input0x01.buttons.ps;
-
-        m_accel.x = -AccelScaleFactor * (511 - util::SwapEndian(src->input0x01.accel_y));
-        m_accel.y = -AccelScaleFactor * (util::SwapEndian(src->input0x01.accel_x) - 511);
-        m_accel.z =  AccelScaleFactor * (511 - util::SwapEndian(src->input0x01.accel_z));
+        m_sixaxis_processor.Update(accel, gyro);
     }
 
     Result Dualshock3Controller::SendEnablePayload() {
-        m_output_report.size = sizeof(EnablePayload);
-        std::memcpy(m_output_report.data, EnablePayload, m_output_report.size);
-
-        R_RETURN(this->SetReport(BtdrvBluetoothHhReportType_Feature, &m_output_report));
+        R_RETURN(this->SetReport(BtdrvBluetoothHhReportType_Feature, &EnablePayload, sizeof(EnablePayload)));
     }
 
     Result Dualshock3Controller::PushRumbleLedState() {
-        std::scoped_lock lk(m_output_mutex);
-
         Dualshock3ReportData report = {};
         report.id = 0x01;
         report.output0x01.data[1] = 10;
@@ -298,10 +328,7 @@ namespace ams::controller {
         std::memcpy(&report.output0x01.data[20], LedConfig, sizeof(LedConfig));
         std::memcpy(&report.output0x01.data[25], LedConfig, sizeof(LedConfig));
 
-        m_output_report.size = sizeof(report.output0x01) + sizeof(report.id);
-        std::memcpy(m_output_report.data, &report, m_output_report.size);
-
-        R_RETURN(this->SetReport(BtdrvBluetoothHhReportType_Output, &m_output_report));
+        R_RETURN(this->SetReport(BtdrvBluetoothHhReportType_Output, &report, sizeof(report.output0x01) + sizeof(report.id)));
     }
 
 }

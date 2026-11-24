@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,115 +18,96 @@
 
 namespace ams::controller {
 
-    namespace {
-
-        constexpr u16 TriggerMax = 0x3ff;
-
-    }
-
     Result XboxOneController::SetVibration(const SwitchMotorData *motor_data) {
-        auto report = reinterpret_cast<XboxOneReportData *>(m_output_report.data);
-        m_output_report.size = sizeof(XboxOneOutputReport0x03) + 1;
-        report->id = 0x03;
-        report->output0x03.enable             = 0x3;
-        report->output0x03.magnitude_strong   = static_cast<u8>(100 * std::max(motor_data->left_motor.low_band_amp, motor_data->right_motor.low_band_amp));
-        report->output0x03.magnitude_weak     = static_cast<u8>(100 * std::max(motor_data->left_motor.high_band_amp, motor_data->right_motor.high_band_amp));
-        report->output0x03.pulse_sustain_10ms = 1;
-        report->output0x03.pulse_release_10ms = 0;
-        report->output0x03.loop_count         = 0;
+        XboxOneReportData report;
+        report.id = 0x03;
+        report.output0x03.enable             = 0x3;
+        report.output0x03.magnitude_strong   = static_cast<u8>(100 * std::max(motor_data->left_motor.low_band_amp, motor_data->right_motor.low_band_amp));
+        report.output0x03.magnitude_weak     = static_cast<u8>(100 * std::max(motor_data->left_motor.high_band_amp, motor_data->right_motor.high_band_amp));
+        report.output0x03.pulse_sustain_10ms = 1;
+        report.output0x03.pulse_release_10ms = 0;
+        report.output0x03.loop_count         = 0;
 
-        return this->WriteDataReport(&m_output_report);
+        return this->WriteDataReport(&report, sizeof(XboxOneOutputReport0x03) + 1);
     }
 
-    void XboxOneController::ProcessInputData(const bluetooth::HidReport *report) {
-        auto xbox_report = reinterpret_cast<const XboxOneReportData *>(&report->data);
+    void XboxOneController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        auto report = reinterpret_cast<const XboxOneReportData *>(report_buffer);
 
-        switch(xbox_report->id) {
+        switch(report->id) {
             case 0x01:
-                this->MapInputReport0x01(xbox_report, report->size >= sizeof(XboxOneInputReport0x01) + 1); break;
+                this->MapInputReport0x01(report, size >= sizeof(XboxOneInputReport0x01) + 1); break;
             case 0x02:
-                this->MapInputReport0x02(xbox_report); break;
+                this->MapInputReport0x02(report); break;
             case 0x04:
-                this->MapInputReport0x04(xbox_report); break;
+                this->MapInputReport0x04(report); break;
             default:
                 break;
         }
     }
 
     void XboxOneController::MapInputReport0x01(const XboxOneReportData *src, bool new_format) {
-        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
-        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
+        auto dpad = DirectionalPad(src->input0x01.dpad);
+        auto left_trigger  = AnalogTrigger(src->input0x01.left_trigger);
+        auto right_trigger = AnalogTrigger(src->input0x01.right_trigger);
 
-        m_buttons.ZR = src->input0x01.right_trigger > (m_trigger_threshold * TriggerMax);
-        m_buttons.ZL = src->input0x01.left_trigger  > (m_trigger_threshold * TriggerMax);
+        m_left_stick.SetValuesFrom(
+            src->input0x01.left_stick.GetX(),
+            src->input0x01.left_stick.GetYInverted()
+        );
+
+        m_right_stick.SetValuesFrom(
+            src->input0x01.right_stick.GetX(),
+            src->input0x01.right_stick.GetYInverted()
+        );
+
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::ZR,     right_trigger.GetNormalizedValue() > m_trigger_threshold);
+        button_state.Assign(SwitchButton::ZL,     left_trigger.GetNormalizedValue()  > m_trigger_threshold);
+        button_state.Assign(SwitchButton::Down,   dpad.IsDown());
+        button_state.Assign(SwitchButton::Up,     dpad.IsUp());
+        button_state.Assign(SwitchButton::Right,  dpad.IsRight());
+        button_state.Assign(SwitchButton::Left,   dpad.IsLeft());
 
         if (new_format) {
-            m_buttons.dpad_down  = (src->input0x01.buttons.dpad == XboxOneDPad_S)  ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_SE) ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_SW);
-            m_buttons.dpad_up    = (src->input0x01.buttons.dpad == XboxOneDPad_N)  ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_NE) ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_NW);
-            m_buttons.dpad_right = (src->input0x01.buttons.dpad == XboxOneDPad_E)  ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_NE) ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_SE);
-            m_buttons.dpad_left  = (src->input0x01.buttons.dpad == XboxOneDPad_W)  ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_NW) ||
-                                   (src->input0x01.buttons.dpad == XboxOneDPad_SW);
-
-            m_buttons.A = src->input0x01.buttons.B;
-            m_buttons.B = src->input0x01.buttons.A;
-            m_buttons.X = src->input0x01.buttons.Y;
-            m_buttons.Y = src->input0x01.buttons.X;
-
-            m_buttons.R = src->input0x01.buttons.RB;
-            m_buttons.L = src->input0x01.buttons.LB;
-
-            m_buttons.minus = src->input0x01.buttons.view;
-            m_buttons.plus  = src->input0x01.buttons.menu;
-
-            m_buttons.lstick_press = src->input0x01.buttons.lstick_press;
-            m_buttons.rstick_press = src->input0x01.buttons.rstick_press;
-
-            m_buttons.home = src->input0x01.buttons.guide;
+            button_state.Assign(SwitchButton::A,      src->input0x01.buttons.B);
+            button_state.Assign(SwitchButton::B,      src->input0x01.buttons.A);
+            button_state.Assign(SwitchButton::X,      src->input0x01.buttons.Y);
+            button_state.Assign(SwitchButton::Y,      src->input0x01.buttons.X);
+            button_state.Assign(SwitchButton::R,      src->input0x01.buttons.RB);
+            button_state.Assign(SwitchButton::L,      src->input0x01.buttons.LB);
+            button_state.Assign(SwitchButton::Minus,  src->input0x01.buttons.view);
+            button_state.Assign(SwitchButton::Plus,   src->input0x01.buttons.menu);
+            button_state.Assign(SwitchButton::StickL, src->input0x01.buttons.lstick_press);
+            button_state.Assign(SwitchButton::StickR, src->input0x01.buttons.rstick_press);
+            button_state.Assign(SwitchButton::Home,   src->input0x01.buttons.guide);
         } else {
-            m_buttons.dpad_down  = (src->input0x01.old.buttons.dpad == XboxOneDPad_S)  ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_SE) ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_SW);
-            m_buttons.dpad_up    = (src->input0x01.old.buttons.dpad == XboxOneDPad_N)  ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_NE) ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_NW);
-            m_buttons.dpad_right = (src->input0x01.old.buttons.dpad == XboxOneDPad_E)  ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_NE) ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_SE);
-            m_buttons.dpad_left  = (src->input0x01.old.buttons.dpad == XboxOneDPad_W)  ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_NW) ||
-                                   (src->input0x01.old.buttons.dpad == XboxOneDPad_SW);
-
-            m_buttons.A = src->input0x01.old.buttons.B;
-            m_buttons.B = src->input0x01.old.buttons.A;
-            m_buttons.X = src->input0x01.old.buttons.Y;
-            m_buttons.Y = src->input0x01.old.buttons.X;
-
-            m_buttons.R = src->input0x01.old.buttons.RB;
-            m_buttons.L = src->input0x01.old.buttons.LB;
-
-            m_buttons.minus = src->input0x01.old.buttons.view;
-            m_buttons.plus  = src->input0x01.old.buttons.menu;
-
-            m_buttons.lstick_press = src->input0x01.old.buttons.lstick_press;
-            m_buttons.rstick_press = src->input0x01.old.buttons.rstick_press;
+            button_state.Assign(SwitchButton::A,      src->input0x01.old.buttons.B);
+            button_state.Assign(SwitchButton::B,      src->input0x01.old.buttons.A);
+            button_state.Assign(SwitchButton::X,      src->input0x01.old.buttons.Y);
+            button_state.Assign(SwitchButton::Y,      src->input0x01.old.buttons.X);
+            button_state.Assign(SwitchButton::R,      src->input0x01.old.buttons.RB);
+            button_state.Assign(SwitchButton::L,      src->input0x01.old.buttons.LB);
+            button_state.Assign(SwitchButton::Minus,  src->input0x01.old.buttons.view);
+            button_state.Assign(SwitchButton::Plus,   src->input0x01.old.buttons.menu);
+            button_state.Assign(SwitchButton::StickL, src->input0x01.old.buttons.lstick_press);
+            button_state.Assign(SwitchButton::StickR, src->input0x01.old.buttons.rstick_press);
         }
+
+        m_buttons = button_state;
     }
 
     void XboxOneController::MapInputReport0x02(const XboxOneReportData *src) {
-        m_buttons.home = src->input0x02.guide;
+        m_buttons.Assign(SwitchButton::Home, src->input0x02.guide);
     }
 
     void XboxOneController::MapInputReport0x04(const XboxOneReportData *src) {
-        m_ext_power = src->input0x04.mode != XboxOnePowerMode_Battery;
-        m_battery = (src->input0x04.mode == XboxOnePowerMode_USB) ? BATTERY_MAX : src->input0x04.capacity << 1;
-        m_charging = src->input0x04.charging;
+        bool powered = src->input0x04.mode != XboxOnePowerMode_Battery;
+        bool charging = src->input0x04.charging;
+        auto battery_level = (src->input0x04.mode == XboxOnePowerMode_USB) ? SwitchBatteryLevel::Full : static_cast<SwitchBatteryLevel>(src->input0x04.capacity);
+        m_power_info.SetPowered(powered);
+        m_power_info.SetCharging(charging);
+        m_power_info.SetBatteryLevel(battery_level);
     }
 
 }

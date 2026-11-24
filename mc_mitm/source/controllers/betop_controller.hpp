@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,21 +18,7 @@
 
 namespace ams::controller {
 
-    enum BetopDPadDirection {
-        BetopDPad_N,
-        BetopDPad_NE,
-        BetopDPad_E,
-        BetopDPad_SE,
-        BetopDPad_S,
-        BetopDPad_SW,
-        BetopDPad_W,
-        BetopDPad_NW,
-        BetopDPad_Released = 0x0f
-    };
-
     struct BetopButtonData {
-        u8 dpad;
-
         u8 A      : 1;
         u8 B      : 1;
         u8        : 1;
@@ -54,11 +40,12 @@ namespace ams::controller {
 
     struct BetopInputReport0x03 {
         u8 unk0;
+        DirectionalPadType<0, 0xF> dpad;
         BetopButtonData buttons;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         u8 unk1;
     } PACKED;
 
@@ -76,10 +63,9 @@ namespace ams::controller {
                 {0x20bc, 0x5501}    // Betop 2585N2
             };
 
-            BetopController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            BetopController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x03(const BetopReportData *src);

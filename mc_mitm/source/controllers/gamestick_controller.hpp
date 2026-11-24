@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,18 +18,6 @@
 
 namespace ams::controller {
 
-    enum GamestickDPadDirection {
-        GamestickDPad_N,
-        GamestickDPad_NE,
-        GamestickDPad_E,
-        GamestickDPad_SE,
-        GamestickDPad_S,
-        GamestickDPad_SW,
-        GamestickDPad_W,
-        GamestickDPad_NW,
-        GamestickDPad_Released = 0x0f
-    };
-
     struct GamestickInputReport0x01 {
         u8 _unk0;
 
@@ -44,7 +32,7 @@ namespace ams::controller {
     } PACKED;
 
     struct GamestickInputReport0x03 {
-        u8 dpad;
+        DirectionalPadType<0, 0xF> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         u8 _unk0[2];
@@ -84,10 +72,9 @@ namespace ams::controller {
                 {0x0f0d, 0x1011}
             };
 
-            GamestickController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            GamestickController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const GamestickReportData *src);

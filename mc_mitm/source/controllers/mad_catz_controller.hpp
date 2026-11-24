@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,53 +18,57 @@
 
 namespace ams::controller {
 
-    enum MadCatzDPadDirection {
-        MadCatzDPad_Released,
-        MadCatzDPad_N,
-        MadCatzDPad_NE,
-        MadCatzDPad_E,
-        MadCatzDPad_SE,
-        MadCatzDPad_S,
-        MadCatzDPad_SW,
-        MadCatzDPad_W,
-        MadCatzDPad_NW
-    };
-
-    struct MadCatzButtonData {
+    struct MadCatzInputReport0x01ButtonData {
         u8 X      : 1;
         u8 A      : 1;
         u8 B      : 1;
         u8 Y      : 1;
-        u8 L1     : 1;
-        u8 R1     : 1;
-        u8 L2     : 1;
-        u8 R2     : 1;
+        u8 LB     : 1;
+        u8 RB     : 1;
+        u8 LT     : 1; // Valid only in Desktop mode.
+        u8 RT     : 1; // Valid only in Desktop mode.
 
-        u8 select : 1;
+        u8 back   : 1; // Valid only in Desktop mode.
         u8 start  : 1;
         u8 L3     : 1;
         u8 R3     : 1;
-        u8 home   : 1;
+        u8 emblem : 1; // Valid only in Desktop mode. Instantaneous.
         u8        : 0;
-
-        u8 dpad;
     } PACKED;
 
     struct MadCatzInputReport0x01 {
-        MadCatzButtonData buttons;
+        MadCatzInputReport0x01ButtonData buttons;
+        DirectionalPadType<1, 0> dpad;
+        AnalogStick<u16> left_stick;
+        AnalogStick<u16> right_stick;
+        AnalogTriggerType<u16> left_trigger;
+        AnalogTriggerType<u16> right_trigger;
+    } PACKED;
+
+    struct MadCatzInputReport0x01_v2 {
+        MadCatzInputReport0x01ButtonData buttons;
+        DirectionalPadType<1, 0> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
     } PACKED;
 
     struct MadCatzInputReport0x02 {
-        u8             : 2;
+        u8 ff_tap      : 1; // Instantaneous.
+        u8 rewind_tap  : 1; // Instantaneous.
         u8 volume_up   : 1;
         u8 volume_down : 1;
-        u8 play        : 1;
-        u8 forward     : 1;
-        u8 rewind      : 1;
+        u8 play_pause  : 1;
+        u8 ff_hold     : 1;
+        u8 rew_hold    : 1;
+        u8 system_back : 1; // Valid only in Smart mode. Instantaneous.
+
+        u8 menu_up     : 1; // Valid only in Mouse mode. D-pad acts as a media remote's d-pad.
+        u8 menu_down   : 1; //  "
+        u8 menu_left   : 1; //  "
+        u8 menu_right  : 1; //  "
+        u8 system_home : 1; // Valid only in Smart mode. Instantaneous.
         u8             : 0;
     } PACKED;
 
@@ -104,27 +108,30 @@ namespace ams::controller {
                     u8       : 0;
                 } xinput;
             };
-
-            u8 dpad;
         } buttons;
+        DirectionalPadType<1, 0> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         u8 reserved;
     } PACKED;
 
     struct MadCatzInputReport0x82 {
         struct {
-            u8        : 2;
-            u8 R1     : 1;
-            u8 L1     : 1;
-            u8 Y      : 1;
-            u8 B      : 1;
-            u8 X      : 1;
-            u8 select : 1;
+            u8            : 2;
+            u8 R1         : 1;
+            u8 L1         : 1;
+            u8 Y          : 1;
+            u8 B          : 1;
+            u8 X          : 1;
+            u8 select     : 1;
 
-            u8 dpad;
+            u8 dpad_up    : 1;
+            u8 dpad_down  : 1;
+            u8 dpad_left  : 1;
+            u8 dpad_right : 1;
+            u8            : 4;
         } buttons;
         u8 reserved;
     } PACKED;
@@ -145,6 +152,7 @@ namespace ams::controller {
         u8 id;
         union {
             MadCatzInputReport0x01 input0x01;
+            MadCatzInputReport0x01_v2 input0x01_v2;
             MadCatzInputReport0x02 input0x02;
             MadCatzInputReport0x81 input0x81;
             MadCatzInputReport0x82 input0x82;
@@ -156,18 +164,19 @@ namespace ams::controller {
 
         public:
             static constexpr const HardwareID hardware_ids[] = {
-                {0x0738, 0x5266},   // Mad Catz C.T.R.L.R
-                {0x0738, 0x5250},   // Mad Catz C.T.R.L.R for Samsung
+                {0x0738, 0x5266},   // Mad Catz C.T.R.L. R
+                {0x0738, 0x5262},   // Mad Catz Micro C.T.R.L. R
+                {0x0738, 0x5250},   // Mad Catz C.T.R.L. R for Samsung
                 {0x0738, 0x5269}    // Mad Catz L.Y.N.X. 3
             };
 
-            MadCatzController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            MadCatzController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
-        private:
+    private:
             void MapInputReport0x01(const MadCatzReportData *src);
+            void MapInputReport0x01_v2(const MadCatzReportData *src);
             void MapInputReport0x02(const MadCatzReportData *src);
             void MapInputReport0x81(const MadCatzReportData *src);
             void MapInputReport0x82(const MadCatzReportData *src);

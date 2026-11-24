@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,7 +23,7 @@ namespace ams::bluetooth::events {
 
     namespace {
 
-        constexpr s32 ThreadPriority = 9;
+        constexpr s32 ThreadPriority = -11;
         constexpr size_t ThreadStackSize = 0x2000;
         alignas(os::ThreadStackAlignment) constinit u8 g_thread_stack[ThreadStackSize];
         constinit os::ThreadType g_thread;

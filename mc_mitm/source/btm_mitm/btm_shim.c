@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -16,47 +16,61 @@
 #include "btm_shim.h"
 #include <stratosphere/sf/sf_mitm_dispatch.h>
 
-Result btmGetDeviceConditionFwd(Service* s, BtmProfile profile, BtmConnectedDeviceV13 *condition, size_t count, s32 *total_out) {
+Result btmGetDeviceConditionFwd(Service* s, BtmProfile profile, BtmDeviceCondition *device_condition, size_t count, s32 *total_out) {
     return serviceMitmDispatchInOut(s, 3, profile, *total_out,
         .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {condition, sizeof(BtmConnectedDeviceV13)*count} },
+        .buffers = { {device_condition, sizeof(BtmDeviceCondition)*count} },
     );
 }
 
-Result btmGetDeviceInfoFwd(Service* s, BtmProfile profile, BtmDeviceInfoV13 *devices, size_t count, s32 *total_out) {
+Result btmGetDeviceInfoFwd(Service* s, BtmProfile profile, BtmDeviceInfo *device_info, size_t count, s32 *total_out) {
     return serviceMitmDispatchInOut(s, 9, profile, *total_out,
         .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {devices, sizeof(BtmDeviceInfoV13)*count} },
+        .buffers = { {device_info, sizeof(BtmDeviceInfo)*count} },
+    );
+}
+
+Result btmGetShortenedDeviceInfoFwd(Service* s, BtmProfile profile, BtmShortenedDeviceInfo *device_info, size_t count, s32 *total_out) {
+    return serviceMitmDispatchInOut(s, 110, profile, *total_out,
+        .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_Out },
+        .buffers = { {device_info, sizeof(BtmShortenedDeviceInfo)*count} },
+    );
+}
+
+Result btmGetShortenedDeviceConditionFwd(Service* s, BtmProfile profile, BtmShortenedDeviceCondition *device_condition, size_t count, s32 *total_out) {
+        return serviceMitmDispatchInOut(s, 115, profile, *total_out,
+        .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_Out },
+        .buffers = { {device_condition, sizeof(BtmShortenedDeviceCondition)*count} },
     );
 }
 
 /* Deprecated */
 
-Result btmGetDeviceConditionDeprecated1Fwd(Service* s, BtmDeviceConditionV100 *condition) {
+Result btmGetDeviceConditionDeprecated1Fwd(Service* s, BtmDeviceConditionListV100 *condition) {
     return serviceMitmDispatch(s, 3,
         .buffer_attrs = { SfBufferAttr_FixedSize | SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {condition, sizeof(BtmDeviceConditionV100)} }
+        .buffers = { {condition, sizeof(BtmDeviceConditionListV100)} }
     );
 }
 
-Result btmGetDeviceConditionDeprecated2Fwd(Service* s, BtmDeviceConditionV510 *condition) {
+Result btmGetDeviceConditionDeprecated2Fwd(Service* s, BtmDeviceConditionListV510 *condition) {
     return serviceMitmDispatch(s, 3,
         .buffer_attrs = { SfBufferAttr_FixedSize | SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {condition, sizeof(BtmDeviceConditionV510)} }
+        .buffers = { {condition, sizeof(BtmDeviceConditionListV510)} }
     );
 }
 
-Result btmGetDeviceConditionDeprecated3Fwd(Service* s, BtmDeviceConditionV800 *condition) {
+Result btmGetDeviceConditionDeprecated3Fwd(Service* s, BtmDeviceConditionListV800 *condition) {
     return serviceMitmDispatch(s, 3,
         .buffer_attrs = { SfBufferAttr_FixedSize | SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {condition, sizeof(BtmDeviceConditionV800)} }
+        .buffers = { {condition, sizeof(BtmDeviceConditionListV800)} }
     );
 }
 
-Result btmGetDeviceConditionDeprecated4Fwd(Service* s, BtmDeviceConditionV900 *condition) {
+Result btmGetDeviceConditionDeprecated4Fwd(Service* s, BtmDeviceConditionListV900 *condition) {
     return serviceMitmDispatch(s, 3,
         .buffer_attrs = { SfBufferAttr_FixedSize | SfBufferAttr_HipcPointer | SfBufferAttr_Out },
-        .buffers = { {condition, sizeof(BtmDeviceConditionV900)} }
+        .buffers = { {condition, sizeof(BtmDeviceConditionListV900)} }
     );
 }
 

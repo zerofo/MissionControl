@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -438,7 +438,7 @@ namespace ams::controller {
         u8 extension[6];
     } PACKED;
 
-    struct WiiInputReport0x3d {
+    struct WiiInputReport0x3D {
         u8 extension[21];
     } PACKED;
 
@@ -477,7 +477,7 @@ namespace ams::controller {
             WiiInputReport0x35 input0x35;
             WiiInputReport0x36 input0x36;
             WiiInputReport0x37 input0x37;
-            WiiInputReport0x3d input0x3d;
+            WiiInputReport0x3D input0x3D;
             WiiInputReport0x3e input0x3e;
             WiiInputReport0x3f input0x3f;
         };
@@ -491,19 +491,20 @@ namespace ams::controller {
                 {0x057e, 0x0330},  // Official Wii U Pro Controller
             };
 
-            WiiController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id)
+            WiiController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id)
             , m_orientation(WiiControllerOrientation_Horizontal)
             , m_extension(WiiExtensionController_None)
             , m_rumble_state(0)
             , m_mp_extension_flag(false)
-            , m_mp_state_changing(false) { }
+            , m_mp_state_changing(false)
+            , m_accel{}
+            , m_gyro{} { }
 
-            Result Initialize();
-            Result SetVibration(const SwitchMotorData *motor_data);
-            Result CancelVibration();
-            Result SetPlayerLed(u8 led_mask);
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual Result Initialize() override;
+            virtual Result SetVibration(const SwitchMotorData *motor_data) override;
+            virtual Result CancelVibration() override;
+            virtual Result SetPlayerLed(SwitchPlayerNumber player_number) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         protected:
             void MapInputReport0x20(const WiiReportData *src);
@@ -514,7 +515,7 @@ namespace ams::controller {
             void MapInputReport0x32(const WiiReportData *src);
             void MapInputReport0x34(const WiiReportData *src);
             void MapInputReport0x35(const WiiReportData *src);
-            void MapInputReport0x3d(const WiiReportData *src);
+            void MapInputReport0x3D(const WiiReportData *src);
 
             void MapCoreButtons(const WiiButtonData *buttons);
             void MapAccelerometerData(const WiiAccelerometerData *accel, const WiiButtonData *buttons);
@@ -559,6 +560,8 @@ namespace ams::controller {
             bool m_mp_extension_flag;
             bool m_mp_state_changing;
 
+            utils::Vec3d<float> m_accel;
+            utils::Vec3d<float> m_gyro;
             WiiAccelerometerCalibrationData m_accel_calibration;
 
             union {

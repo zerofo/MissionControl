@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -13,5 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
+#include "utils/utils_bitpacked_pair.hpp"
 #include "utils/utils_bluetooth_address.hpp"
 #include "utils/utils_crc8.hpp"
+#include "utils/utils_quaternion.hpp"

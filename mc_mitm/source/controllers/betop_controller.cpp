@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,51 +18,52 @@
 
 namespace ams::controller {
 
-    void BetopController::ProcessInputData(const bluetooth::HidReport *report) {
-        auto betop_report = reinterpret_cast<const BetopReportData *>(&report->data);
+    void BetopController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const BetopReportData *>(report_buffer);
 
-        switch(betop_report->id) {
+        switch(report->id) {
             case 0x03:
-                this->MapInputReport0x03(betop_report); break;
+                this->MapInputReport0x03(report); break;
             default:
                 break;
         }
     }
 
     void BetopController::MapInputReport0x03(const BetopReportData *src) {
-        m_left_stick  = PackAnalogStickValues(src->input0x03.left_stick.x,  InvertAnalogStickValue(src->input0x03.left_stick.y));
-        m_right_stick = PackAnalogStickValues(src->input0x03.right_stick.x, InvertAnalogStickValue(src->input0x03.right_stick.y));
+        auto dpad = DirectionalPad(src->input0x03.dpad);
+        auto left_trigger  = AnalogTrigger(src->input0x03.left_trigger);
+        auto right_trigger = AnalogTrigger(src->input0x03.right_trigger);
 
-        m_buttons.dpad_down  = (src->input0x03.buttons.dpad == BetopDPad_S)  ||
-                               (src->input0x03.buttons.dpad == BetopDPad_SE) ||
-                               (src->input0x03.buttons.dpad == BetopDPad_SW);
-        m_buttons.dpad_up    = (src->input0x03.buttons.dpad == BetopDPad_N)  ||
-                               (src->input0x03.buttons.dpad == BetopDPad_NE) ||
-                               (src->input0x03.buttons.dpad == BetopDPad_NW);
-        m_buttons.dpad_right = (src->input0x03.buttons.dpad == BetopDPad_E)  ||
-                               (src->input0x03.buttons.dpad == BetopDPad_NE) ||
-                               (src->input0x03.buttons.dpad == BetopDPad_SE);
-        m_buttons.dpad_left  = (src->input0x03.buttons.dpad == BetopDPad_W)  ||
-                               (src->input0x03.buttons.dpad == BetopDPad_NW) ||
-                               (src->input0x03.buttons.dpad == BetopDPad_SW);
+        m_left_stick.SetValuesFrom(
+            src->input0x03.left_stick.GetX(),
+            src->input0x03.left_stick.GetYInverted()
+        );
 
-        m_buttons.A = src->input0x03.buttons.B;
-        m_buttons.B = src->input0x03.buttons.A;
-        m_buttons.X = src->input0x03.buttons.Y;
-        m_buttons.Y = src->input0x03.buttons.X;
+        m_right_stick.SetValuesFrom(
+            src->input0x03.right_stick.GetX(),
+            src->input0x03.right_stick.GetYInverted()
+        );
 
-        m_buttons.R  = src->input0x03.buttons.R1;
-        m_buttons.ZR = src->input0x03.buttons.R2;
-        m_buttons.L  = src->input0x03.buttons.L1;
-        m_buttons.ZL = src->input0x03.buttons.L2;
-
-        m_buttons.lstick_press = src->input0x03.buttons.L3;
-        m_buttons.rstick_press = src->input0x03.buttons.R3;
-
-        m_buttons.minus = src->input0x03.buttons.select;
-        m_buttons.plus  = src->input0x03.buttons.start;
-
-        m_buttons.home = src->input0x03.buttons.home;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,   dpad.IsDown());
+        button_state.Assign(SwitchButton::Up,     dpad.IsUp());
+        button_state.Assign(SwitchButton::Right,  dpad.IsRight());
+        button_state.Assign(SwitchButton::Left,   dpad.IsLeft());
+        button_state.Assign(SwitchButton::A,      src->input0x03.buttons.B);
+        button_state.Assign(SwitchButton::B,      src->input0x03.buttons.A);
+        button_state.Assign(SwitchButton::X,      src->input0x03.buttons.Y);
+        button_state.Assign(SwitchButton::Y,      src->input0x03.buttons.X);
+        button_state.Assign(SwitchButton::R,      src->input0x03.buttons.R1);
+        button_state.Assign(SwitchButton::L,      src->input0x03.buttons.L1);
+        button_state.Assign(SwitchButton::ZR,     right_trigger.GetNormalizedValue() > m_trigger_threshold);
+        button_state.Assign(SwitchButton::ZL,     left_trigger.GetNormalizedValue()  > m_trigger_threshold);
+        button_state.Assign(SwitchButton::StickL, src->input0x03.buttons.L3);
+        button_state.Assign(SwitchButton::StickR, src->input0x03.buttons.R3);
+        button_state.Assign(SwitchButton::Minus,  src->input0x03.buttons.select);
+        button_state.Assign(SwitchButton::Plus,   src->input0x03.buttons.start);
+        button_state.Assign(SwitchButton::Home,   src->input0x03.buttons.home);
+        m_buttons = button_state;
     }
 
 }

@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2020-2026 ndeadly
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+#include "amazon_controller.hpp"
+#include <stratosphere.hpp>
+
+namespace ams::controller {
+
+    void AmazonController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const AmazonReportData *>(report_buffer);
+
+        switch(report->id) {
+            case 0x01:
+                this->MapInputReport0x01(report); break;
+            case 0x02:
+                this->MapInputReport0x02(report); break;
+            default:
+                break;
+        }
+    }
+
+    void AmazonController::MapInputReport0x01(const AmazonReportData *src) {
+        auto dpad = DirectionalPad(src->input0x01.dpad);
+        auto left_trigger  = AnalogTrigger(src->input0x01.left_trigger);
+        auto right_trigger = AnalogTrigger(src->input0x01.right_trigger);
+
+        m_left_stick.SetValuesFrom(
+            src->input0x01.left_stick.GetX(),
+            src->input0x01.left_stick.GetYInverted()
+        );
+
+        m_right_stick.SetValuesFrom(
+            src->input0x01.right_stick.GetX(),
+            src->input0x01.right_stick.GetYInverted()
+        );
+
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,    dpad.IsDown());
+        button_state.Assign(SwitchButton::Up,      dpad.IsUp());
+        button_state.Assign(SwitchButton::Right,   dpad.IsRight());
+        button_state.Assign(SwitchButton::Left,    dpad.IsLeft());
+        button_state.Assign(SwitchButton::A,       src->input0x01.buttons.B);
+        button_state.Assign(SwitchButton::B,       src->input0x01.buttons.A);
+        button_state.Assign(SwitchButton::X,       src->input0x01.buttons.Y);
+        button_state.Assign(SwitchButton::Y,       src->input0x01.buttons.X);
+        button_state.Assign(SwitchButton::R,       src->input0x01.buttons.R1);
+        button_state.Assign(SwitchButton::L,       src->input0x01.buttons.L1);
+        button_state.Assign(SwitchButton::ZR,      right_trigger.GetNormalizedValue() > m_trigger_threshold);
+        button_state.Assign(SwitchButton::ZL,      left_trigger.GetNormalizedValue()  > m_trigger_threshold);
+        button_state.Assign(SwitchButton::StickL,  src->input0x01.buttons.L3);
+        button_state.Assign(SwitchButton::StickR,  src->input0x01.buttons.R3);
+        button_state.Assign(SwitchButton::Plus,    src->input0x01.buttons.menu);
+        button_state.Assign(SwitchButton::Minus,   src->input0x01.buttons.back);
+        button_state.Assign(SwitchButton::Capture, src->input0x01.buttons.middle);
+        m_buttons = button_state;
+
+        auto battery_level = SwitchBatteryLevelConverter::ConvertPercentage(src->input0x01.battery);
+        m_power_info.SetBatteryLevel(battery_level);
+    }
+
+    void AmazonController::MapInputReport0x02(const AmazonReportData *src) {
+        m_buttons.Assign(SwitchButton::Home, src->input0x02.home);
+    }
+
+}

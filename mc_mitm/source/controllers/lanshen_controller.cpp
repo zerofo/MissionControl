@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,49 +18,49 @@
 
 namespace ams::controller {
 
-    void LanShenController::ProcessInputData(const bluetooth::HidReport *report) {
-        auto LanShen_report = reinterpret_cast<const LanShenReportData *>(&report->data);
+    void LanShenController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const LanShenReportData *>(report_buffer);
 
-        switch(LanShen_report->id) {
+        switch(report->id) {
             case 0x01:
-                this->MapInputReport0x01(LanShen_report); break;
+                this->MapInputReport0x01(report); break;
             default:
                 break;
         }
     }
 
     void LanShenController::MapInputReport0x01(const LanShenReportData *src) {
-        m_left_stick  = PackAnalogStickValues(src->input0x01.left_stick.x,  InvertAnalogStickValue(src->input0x01.left_stick.y));
-        m_right_stick = PackAnalogStickValues(src->input0x01.right_stick.x, InvertAnalogStickValue(src->input0x01.right_stick.y));
-        
-        m_buttons.dpad_down  = (src->input0x01.buttons.dpad == LanShenDPad_S)  ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_SE) ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_SW);
-        m_buttons.dpad_up    = (src->input0x01.buttons.dpad == LanShenDPad_N)  ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_NW);
-        m_buttons.dpad_right = (src->input0x01.buttons.dpad == LanShenDPad_E)  ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_NE) ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_SE);
-        m_buttons.dpad_left  = (src->input0x01.buttons.dpad == LanShenDPad_W)  ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_NW) ||
-                               (src->input0x01.buttons.dpad == LanShenDPad_SW);
+        auto dpad = DirectionalPad(src->input0x01.dpad);
 
-        m_buttons.A = src->input0x01.buttons.B;
-        m_buttons.B = src->input0x01.buttons.A;
-        m_buttons.X = src->input0x01.buttons.Y;
-        m_buttons.Y = src->input0x01.buttons.X;
+        m_left_stick.SetValuesFrom(
+            src->input0x01.left_stick.GetX(),
+            src->input0x01.left_stick.GetYInverted()
+        );
 
-        m_buttons.R  = src->input0x01.buttons.R1;
-        m_buttons.ZR = src->input0x01.buttons.R2;
-        m_buttons.L  = src->input0x01.buttons.L1;
-        m_buttons.ZL = src->input0x01.buttons.L2;
+        m_right_stick.SetValuesFrom(
+            src->input0x01.right_stick.GetX(),
+            src->input0x01.right_stick.GetYInverted()
+        );
 
-        //m_buttons.minus = src->input0x01.buttons.select;
-        m_buttons.plus  = src->input0x01.buttons.start;
-
-        m_buttons.lstick_press = src->input0x01.buttons.L3;
-        m_buttons.rstick_press = src->input0x01.buttons.R3;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,   dpad.IsDown());
+        button_state.Assign(SwitchButton::Up,     dpad.IsUp());
+        button_state.Assign(SwitchButton::Right,  dpad.IsRight());
+        button_state.Assign(SwitchButton::Left,   dpad.IsLeft());
+        button_state.Assign(SwitchButton::A,      src->input0x01.buttons.B);
+        button_state.Assign(SwitchButton::B,      src->input0x01.buttons.A);
+        button_state.Assign(SwitchButton::X,      src->input0x01.buttons.Y);
+        button_state.Assign(SwitchButton::Y,      src->input0x01.buttons.X);
+        button_state.Assign(SwitchButton::R,      src->input0x01.buttons.R1);
+        button_state.Assign(SwitchButton::L,      src->input0x01.buttons.L1);
+        button_state.Assign(SwitchButton::ZL,     src->input0x01.buttons.L2);
+        button_state.Assign(SwitchButton::ZR,     src->input0x01.buttons.R2);
+        // button_state.Assign(SwitchButton::Minus,  src->input0x01.buttons.select);
+        button_state.Assign(SwitchButton::Plus,   src->input0x01.buttons.start);
+        button_state.Assign(SwitchButton::StickL, src->input0x01.buttons.L3);
+        button_state.Assign(SwitchButton::StickR, src->input0x01.buttons.R3);
+        m_buttons = button_state;
     }
 
 }

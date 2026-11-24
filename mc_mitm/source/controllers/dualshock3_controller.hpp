@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -58,16 +58,16 @@ namespace ams::controller {
         u8 pressure_dpad_right;
         u8 pressure_dpad_down;
         u8 pressure_dpad_left;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         u8 unk3[2];
         u8 pressure_triangle;
         u8 pressure_circle;
         u8 pressure_cross;
         u8 pressure_square;
         u8 unk4[3];
-        u8 charge;
-        u8 battery;
+        u8 charge_status;
+        u8 battery_level;
         u8 connection;
         u8 unk5[9];
         u16 accel_x;
@@ -102,15 +102,14 @@ namespace ams::controller {
             static Result UsbPair(UsbHsInterface *iface);
 
         public:
-            Dualshock3Controller(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            Dualshock3Controller(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            Result Initialize(void);
-            Result SetVibration(const SwitchMotorData *motor_data);
-            Result CancelVibration();
-            Result SetPlayerLed(u8 led_mask);
+            virtual Result Initialize(void) override;
+            virtual Result SetVibration(const SwitchMotorData *motor_data) override;
+            virtual Result CancelVibration() override;
+            virtual Result SetPlayerLed(SwitchPlayerNumber player_number) override;
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const Dualshock3ReportData *src);

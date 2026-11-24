@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,7 +18,8 @@
 
 namespace ams::utils {
 
-    bool BluetoothAddressCompare(const bluetooth::Address *addr1, const bluetooth::Address *addr2);
-    Result BluetoothAddressToString(const bluetooth::Address *address, char *out, size_t out_size);
+    bool BluetoothAddressCompare(bluetooth::Address addr1, bluetooth::Address addr2);
+    bluetooth::Address BluetoothAddressReverse(bluetooth::Address address);
+    Result BluetoothAddressToString(bluetooth::Address address, char *out, size_t out_size);
 
 }

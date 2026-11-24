@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,21 +18,7 @@
 
 namespace ams::controller {
 
-    enum LanShenDPadDirection {
-        LanShenDPad_N,
-        LanShenDPad_NE,
-        LanShenDPad_E,
-        LanShenDPad_SE,
-        LanShenDPad_S,
-        LanShenDPad_SW,
-        LanShenDPad_W,
-        LanShenDPad_NW,
-        LanShenDPad_Released = 0x0f
-    };
-
     struct LanShenButtonData {
-        u8 dpad;
-
         u8 A     : 1;
         u8 B     : 1;
         u8       : 1;
@@ -50,12 +36,12 @@ namespace ams::controller {
         u8 L3    : 1;
         u8 R3    : 1;
         u8       : 1;
-
     } PACKED;
 
     struct LanShenInputReport0x01{
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
+        DirectionalPadType<0, 0xF> dpad;
         LanShenButtonData buttons;
         u8 _unk[4];
     } PACKED;
@@ -74,10 +60,9 @@ namespace ams::controller {
                 {0x0079, 0x181c}    // LanShen X1Pro
             };
 
-            LanShenController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            LanShenController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const LanShenReportData *src);

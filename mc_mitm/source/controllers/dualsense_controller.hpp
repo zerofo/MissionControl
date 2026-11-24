@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,18 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum DualsenseDPadDirection {
-        DualsenseDPad_N,
-        DualsenseDPad_NE,
-        DualsenseDPad_E,
-        DualsenseDPad_SE,
-        DualsenseDPad_S,
-        DualsenseDPad_SW,
-        DualsenseDPad_W,
-        DualsenseDPad_NW,
-        DualsenseDPad_Released
-    };
 
     struct DualsenseButtonData {
         u8 dpad     : 4;
@@ -116,19 +104,19 @@ namespace ams::controller {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         DualsenseButtonData buttons;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
     } PACKED;
 
     struct DualsenseInputReport0x31 {
         u8 _unk0;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         u8 counter;
         DualsenseButtonData buttons;
-        u8 _unk1[4];
+        u32 _unk1;
         s16 vel_x;
         s16 vel_y;
         s16 vel_z;
@@ -136,14 +124,14 @@ namespace ams::controller {
         s16 acc_y;
         s16 acc_z;
         s32 timestamp;
-        u8 _unk2;
+        u8 temperature;
         DualsenseTouchpadPoint touch_points[2];
         u8 _unk3[12];
 
-        u8 battery_level : 4;
-        u8 usb           : 1;
-        u8 full          : 1;
-        u8               : 0;
+        u8 battery_level   : 4;
+        u8 powered         : 1;
+        u8 charge_complete : 1;
+        u8                 : 0;
     } PACKED;
 
     struct DualsenseReportData {
@@ -165,34 +153,36 @@ namespace ams::controller {
                 {0x054c, 0x0df2}    // Sony Dualsense Edge Controller
             };
 
-            DualsenseController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id)
+            DualsenseController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id)
             , m_led_flags(0)
             , m_lightbar_colour({0, 0, 0})
             , m_lightbar_brightness(0)
             , m_rumble_state({0, 0}) { }
 
-            Result Initialize();
-            Result SetVibration(const SwitchMotorData *motor_data);
-            Result CancelVibration();
-            Result SetPlayerLed(u8 led_mask);
+            virtual Result Initialize() override;
+            virtual Result SetVibration(const SwitchMotorData *motor_data) override;
+            virtual Result CancelVibration() override;
+            virtual Result SetPlayerLed(SwitchPlayerNumber player_number) override;
             Result SetLightbarColour(RGBColour colour);
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const DualsenseReportData *src);
             void MapInputReport0x31(const DualsenseReportData *src);
 
-            void MapButtons(const DualsenseButtonData *buttons);
-
             Result GetVersionInfo(DualsenseVersionInfo *version_info);
             Result GetCalibrationData(DualsenseImuCalibrationData *calibration);
             Result PushRumbleLedState();
 
+            u8 m_feature_flags0;
+            u8 m_feature_flags1;
             u8 m_led_flags;
             RGBColour m_lightbar_colour;
             u8 m_lightbar_brightness;
+            u8 m_rumble_intensity;
+            u8 m_adaptive_trigger_travel;
+
             DualsenseRumbleData m_rumble_state;
 
             DualsenseVersionInfo m_version_info;

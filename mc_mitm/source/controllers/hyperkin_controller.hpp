@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,18 +18,6 @@
 
 namespace ams::controller {
 
-    enum HyperkinDPadDirection {
-        HyperkinDPad_Released,
-        HyperkinDPad_N,
-        HyperkinDPad_NE,
-        HyperkinDPad_E,
-        HyperkinDPad_SE,
-        HyperkinDPad_S,
-        HyperkinDPad_SW,
-        HyperkinDPad_W,
-        HyperkinDPad_NW
-    };
-
     struct HyperkinButtonData {
         u8 B      : 1;
         u8 A      : 1;
@@ -42,12 +30,11 @@ namespace ams::controller {
         u8 select : 1;
         u8 start  : 1;
         u8        : 0;
-
-        u8 dpad;
     } PACKED;
 
-    struct HyperkinInputReport0x3f{
+    struct HyperkinInputReport0x3F{
         HyperkinButtonData buttons;
+        DirectionalPadType<1, 0> dpad;
         AnalogStick<u16> left_stick;
         AnalogStick<u16> right_stick;
         u8 unk;
@@ -56,7 +43,7 @@ namespace ams::controller {
     struct HyperkinReportData{
         u8 id;
         union {
-            HyperkinInputReport0x3f input0x3f;
+            HyperkinInputReport0x3F input0x3F;
         };
     } PACKED;
 
@@ -67,13 +54,12 @@ namespace ams::controller {
                 {0x2e24, 0x200a}    // Hyperkin Scout
             };
 
-            HyperkinController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            HyperkinController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
-            void MapInputReport0x3f(const HyperkinReportData *src);
+            void MapInputReport0x3F(const HyperkinReportData *src);
 
     };
 

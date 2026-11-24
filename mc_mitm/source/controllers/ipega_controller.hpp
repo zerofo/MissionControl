@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,21 +18,7 @@
 
 namespace ams::controller {
 
-    enum IpegaDPadDirection {
-        IpegaDPad_N,
-        IpegaDPad_NE,
-        IpegaDPad_E,
-        IpegaDPad_SE,
-        IpegaDPad_S,
-        IpegaDPad_SW,
-        IpegaDPad_W,
-        IpegaDPad_NW,
-        IpegaDPad_Released = 0x88
-    };
-
     struct IpegaButtonData {
-        u8 dpad;
-
         u8 A            : 1;
         u8 B            : 1;
         u8 L3_g910      : 1;
@@ -60,9 +46,10 @@ namespace ams::controller {
     struct IpegaInputReport0x07 {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
+        DirectionalPadType<0, 0x88> dpad;
         IpegaButtonData buttons;
-        u8 right_trigger;
-        u8 left_trigger;
+        AnalogTriggerType<u8> right_trigger;
+        AnalogTriggerType<u8> left_trigger;
     } PACKED;
 
     struct IpegaReportData {
@@ -82,10 +69,9 @@ namespace ams::controller {
                 {0x05ac, 0x022c}    // ipega 9017S (Another fucking Apple keyboard ID. Eventually these are going to clash)
             };
 
-            IpegaController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            IpegaController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x02(const IpegaReportData *src);

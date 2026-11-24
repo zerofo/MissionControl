@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,18 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum RazerDPadDirection {
-        RazerDPad_N,
-        RazerDPad_NE,
-        RazerDPad_E,
-        RazerDPad_SE,
-        RazerDPad_S,
-        RazerDPad_SW,
-        RazerDPad_W,
-        RazerDPad_NW,
-        RazerDPad_Released
-    };
 
     struct RazerButtonData {
         u8 dpad   : 4;
@@ -54,8 +42,8 @@ namespace ams::controller {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         RazerButtonData buttons;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
     } PACKED;
 
     struct RazerReportData{
@@ -72,10 +60,9 @@ namespace ams::controller {
                 {0x1532, 0x0900}    // Razer Serval
             };
 
-            RazerController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            RazerController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const RazerReportData *src);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,18 +23,6 @@ namespace ams::controller {
         MocuteControllerVariant_053,
     };
 
-    enum MocuteDPadDirection {
-        MocuteDPad_N,
-        MocuteDPad_NE,
-        MocuteDPad_E,
-        MocuteDPad_SE,
-        MocuteDPad_S,
-        MocuteDPad_SW,
-        MocuteDPad_W,
-        MocuteDPad_NW,
-        MocuteDPad_Released = 0x0f
-    };
-
     struct MocuteButtonData {
         u8 dpad   : 4;
         u8 A      : 1;
@@ -56,16 +44,16 @@ namespace ams::controller {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         MocuteButtonData buttons;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
     } PACKED;
 
     // This only applies for mocute 053. 050 sends reports 0x04 and 0x06 in the same format as 0x01
     struct MocuteInputReport0x04 {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         MocuteButtonData buttons;
     } PACKED;
 
@@ -86,16 +74,13 @@ namespace ams::controller {
                 {0x0000, 0x0000}    // Mocute 053 Controller (bring on the clashing hardware IDs)
             };
 
-            MocuteController(const bluetooth::Address *address, HardwareID id);
+            MocuteController(bluetooth::Address address, HardwareID id);
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const MocuteReportData *src);
             void MapInputReport0x04(const MocuteReportData *src);
-
-            void MapAnalogSticks(const AnalogStick<u8> *left_stick, const AnalogStick<u8> *right_stick);
-            void MapButtons(const MocuteButtonData *buttons, u8 dpad_format);
 
             MocuteControllerVariant m_variant;
     };

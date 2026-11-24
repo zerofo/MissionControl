@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -46,8 +46,8 @@ namespace ams::controller {
     struct OuyaInputReport0x07 {
         AnalogStick<u16> left_stick;
         AnalogStick<u16> right_stick;
-        u16 left_trigger;
-        u16 right_trigger;
+        AnalogTriggerType<u16> left_trigger;
+        AnalogTriggerType<u16> right_trigger;
         OuyaButtonData buttons;
     } PACKED;
 
@@ -66,10 +66,9 @@ namespace ams::controller {
                 {0x2836, 0x0001}
             };
 
-            OuyaController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            OuyaController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x03(const OuyaReportData *src);

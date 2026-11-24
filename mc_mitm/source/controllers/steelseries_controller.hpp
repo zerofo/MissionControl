@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,30 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum SteelseriesDPadDirection {
-        SteelseriesDPad_N,
-        SteelseriesDPad_NE,
-        SteelseriesDPad_E,
-        SteelseriesDPad_SE,
-        SteelseriesDPad_S,
-        SteelseriesDPad_SW,
-        SteelseriesDPad_W,
-        SteelseriesDPad_NW,
-        SteelseriesDPad_Released = 0x0f,
-    };
-
-    enum SteelseriesDPadDirection2 {
-        SteelseriesDPad2_Released = 0x0,
-        SteelseriesDPad2_N,
-        SteelseriesDPad2_NE,
-        SteelseriesDPad2_E,
-        SteelseriesDPad2_SE,
-        SteelseriesDPad2_S,
-        SteelseriesDPad2_SW,
-        SteelseriesDPad2_W,
-        SteelseriesDPad2_NW,
-    };
 
     struct SteelseriesButtonData {
         u8 A      : 1;
@@ -87,19 +63,19 @@ namespace ams::controller {
     } PACKED;
 
     struct SteelseriesInputReport0x01 {
-        u8 dpad;
+        DirectionalPadType<0, 0xF> dpad;
         AnalogStick<s8> left_stick;
         AnalogStick<s8> right_stick;
         SteelseriesButtonData buttons;
     } PACKED;
 
     struct SteelseriesInputReport0x01_v2 {
-        u8 dpad;
+        DirectionalPadType<0, 0xF> dpad;
         SteelseriesButtonData buttons;
         AnalogStick<s16> left_stick;
         AnalogStick<s16> right_stick;
-        u16 right_trigger;
-        u16 left_trigger;
+        AnalogTriggerType<u16> right_trigger;
+        AnalogTriggerType<u16> left_trigger;
     } PACKED;
 
     struct SteelseriesInputReport0x02 {
@@ -119,13 +95,13 @@ namespace ams::controller {
         
     } PACKED;
 
-    struct SteelseriesInputReport0xc4 {
+    struct SteelseriesInputReport0xC4 {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         SteelseriesButtonData buttons;
-        u8 dpad;
+        DirectionalPadType<1, 0> dpad;
         u8 _unk[2];
     } PACKED;
 
@@ -138,7 +114,7 @@ namespace ams::controller {
                     SteelseriesInputReport0x01_v2 input0x01_v2;
                     SteelseriesInputReport0x02 input0x02;
                     SteelseriesInputReport0x12 input0x12;
-                    SteelseriesInputReport0xc4 input0xc4;
+                    SteelseriesInputReport0xC4 input0xC4;
                 };
             };
 
@@ -156,17 +132,16 @@ namespace ams::controller {
                 {0x0111, 0x1419}    // Steelseries Stratus XL
             };
 
-            SteelseriesController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            SteelseriesController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const SteelseriesReportData *src);
             void MapInputReport0x01_v2(const SteelseriesReportData *src);
             void MapInputReport0x02(const SteelseriesReportData *src);
             void MapInputReport0x12(const SteelseriesReportData *src);
-            void MapInputReport0xc4(const SteelseriesReportData *src);
+            void MapInputReport0xC4(const SteelseriesReportData *src);
             void MapMfiInputReport(const SteelseriesReportData *src);
     };
 

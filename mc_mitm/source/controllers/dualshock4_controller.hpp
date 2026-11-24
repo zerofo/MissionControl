@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -36,18 +36,6 @@ namespace ams::controller {
         Dualshock4ReportRate_71Hz   = 14,
         Dualshock4ReportRate_66Hz   = 15,
         Dualshock4ReportRate_62Hz   = 16
-    };
-
-    enum Dualshock4DPadDirection {
-        Dualshock4DPad_N,
-        Dualshock4DPad_NE,
-        Dualshock4DPad_E,
-        Dualshock4DPad_SE,
-        Dualshock4DPad_S,
-        Dualshock4DPad_SW,
-        Dualshock4DPad_W,
-        Dualshock4DPad_NW,
-        Dualshock4DPad_Released
     };
 
     struct Dualshock4ButtonData {
@@ -143,8 +131,8 @@ namespace ams::controller {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         Dualshock4ButtonData buttons;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
     } PACKED;
 
     struct Dualshock4InputReport0x11 {
@@ -152,8 +140,8 @@ namespace ams::controller {
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         Dualshock4ButtonData buttons;
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
 
         u16 timestamp;
         u8 temperature;
@@ -166,7 +154,7 @@ namespace ams::controller {
         u8 _unk1[5];
 
         u8 battery_level : 4;
-        u8 usb           : 1;
+        u8 powered       : 1;
         u8 mic           : 1;
         u8 phone         : 1;
         u8               : 0;
@@ -203,26 +191,23 @@ namespace ams::controller {
                 {0x2e95, 0x7725}    // SCUF Vantage 2
             };
 
-            Dualshock4Controller(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id)
+            Dualshock4Controller(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id)
             , m_report_rate(Dualshock4ReportRate_125Hz)
             , m_lightbar_colour({0, 0, 0})
             , m_lightbar_brightness(0)
             , m_rumble_state({0, 0}) { }
 
-            Result Initialize();
-            Result SetVibration(const SwitchMotorData *motor_data);
-            Result CancelVibration();
-            Result SetPlayerLed(u8 led_mask);
+            virtual Result Initialize() override;
+            virtual Result SetVibration(const SwitchMotorData *motor_data) override;
+            virtual Result CancelVibration() override;
+            virtual Result SetPlayerLed(SwitchPlayerNumber player_number) override;
             Result SetLightbarColour(RGBColour colour);
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const Dualshock4ReportData *src);
             void MapInputReport0x11(const Dualshock4ReportData *src);
-
-            void MapButtons(const Dualshock4ButtonData *buttons);
             
             Result GetVersionInfo(Dualshock4VersionInfo *version_info);
             Result GetCalibrationData(Dualshock4ImuCalibrationData *calibration);

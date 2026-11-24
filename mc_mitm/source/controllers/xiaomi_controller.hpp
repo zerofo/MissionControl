@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,18 +17,6 @@
 #include "emulated_switch_controller.hpp"
 
 namespace ams::controller {
-
-    enum XiaomiDPadDirection {
-        XiaomiDPad_N,
-        XiaomiDPad_NE,
-        XiaomiDPad_E,
-        XiaomiDPad_SE,
-        XiaomiDPad_S,
-        XiaomiDPad_SW,
-        XiaomiDPad_W,
-        XiaomiDPad_NW,
-        XiaomiDPad_Released = 0x0f
-    };
 
     struct XiaomiButtonData {
         u8 A            : 1;
@@ -50,17 +38,16 @@ namespace ams::controller {
         u8              : 0;
 
         u8 _unk;
-
-        u8 dpad;
     } PACKED;
 
     struct XiaomiInputReport0x04 {
         XiaomiButtonData buttons;
+        DirectionalPadType<0, 0xF> dpad;
         AnalogStick<u8> left_stick;
         AnalogStick<u8> right_stick;
         u8 _unk0[2];
-        u8 left_trigger;
-        u8 right_trigger;
+        AnalogTriggerType<u8> left_trigger;
+        AnalogTriggerType<u8> right_trigger;
         u16 accel_x;
         u16 accel_y;
         u16 accel_z;
@@ -83,12 +70,11 @@ namespace ams::controller {
                 {0x2717, 0x3144}    // Xiaomi Mi Controller
             };
 
-            XiaomiController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            XiaomiController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            Result Initialize();
+            virtual Result Initialize() override;
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x04(const XiaomiReportData *src);

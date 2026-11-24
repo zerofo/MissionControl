@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -96,28 +96,14 @@ namespace ams::controller {
         };
     } PACKED;
 
-    class SwitchRumbleDecoder {
-        public:
-            SwitchRumbleDecoder();
+    struct SwitchEncodedMotorData {
+        SwitchEncodedVibrationSamples left_motor;
+        SwitchEncodedVibrationSamples right_motor;
+    } PACKED;
 
-            void DecodeSamples(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void GetCurrentOutputValue(SwitchVibrationValues *output);
-
-        private:
-            void DecodeOne5Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void DecodeOne7Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void DecodeTwo5Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void DecodeTwo7Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void DecodeThree5Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            void DecodeThree7Bit(const SwitchEncodedVibrationSamples *encoded, SwitchVibrationSamples *decoded);
-            
-        private:
-            struct {
-                float lo_amp_linear;
-                float lo_freq_linear;
-                float hi_amp_linear;
-                float hi_freq_linear;
-            } m_state;
+    struct SwitchMotorData {
+        SwitchVibrationValues left_motor;
+        SwitchVibrationValues right_motor;
     };
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -23,8 +23,7 @@ namespace ams::controller {
 
         const std::string OfficialGamepadNames[] = {
             "NintendoGamepad",
-            "Joy-Con (L)",
-            "Joy-Con (R)",
+            "Joy-Con",
             "Pro Controller",
             "Lic Pro Controller",
             "NES Controller",
@@ -54,8 +53,10 @@ namespace ams::controller {
             }
         }
 
+        const char *controller_name = hos::GetVersion() < hos::Version_13_0_0 ? device->name.name : device->name2;
+
         // Additionally check controller name against known official Nintendo controllers, as some controllers (eg. JoyCons paired via rails) don't report the correct vid/pid
-        if (IsOfficialSwitchControllerName(hos::GetVersion() < hos::Version_13_0_0 ? device->name.name : device->name2))
+        if (IsOfficialSwitchControllerName(controller_name))
             return ControllerType_Switch;
 
         for (auto hwId : WiiController::hardware_ids) {
@@ -108,7 +109,11 @@ namespace ams::controller {
 
         for (auto hwId : IpegaController::hardware_ids) {
             if ( (device->vid == hwId.vid) && (device->pid == hwId.pid) ) {
-                return ControllerType_Ipega;
+                if (std::strcmp(controller_name, AmazonController::FireGameControllerName) ==  0) {
+                    return ControllerType_Amazon;
+                } else {
+                    return ControllerType_Ipega;
+                }
             }
         }
 
@@ -225,9 +230,9 @@ namespace ams::controller {
         return false;
     }
 
-    void AttachHandler(const bluetooth::Address *address) {
+    void AttachHandler(bluetooth::Address address) {
         bluetooth::DevicesSettings device_settings;
-        R_ABORT_UNLESS(btdrvGetPairedDeviceInfo(*address, &device_settings));
+        R_ABORT_UNLESS(btdrvGetPairedDeviceInfo(address, &device_settings));
 
         HardwareID id = { device_settings.vid, device_settings.pid };
 
@@ -312,6 +317,9 @@ namespace ams::controller {
             case ControllerType_Bionik:
                 controller = std::make_shared<BionikController>(address, id);
                 break;
+            case ControllerType_Amazon:
+                controller = std::make_shared<AmazonController>(address, id);
+                break;
             default:
                 controller = std::make_shared<UnknownController>(address, id);
                 break;
@@ -328,22 +336,22 @@ namespace ams::controller {
         }
     }
 
-    void RemoveHandler(const bluetooth::Address *address) {
+    void RemoveHandler(bluetooth::Address address) {
         std::scoped_lock lk(g_controller_lock);
 
         for (auto it = g_controllers.begin(); it < g_controllers.end(); ++it) {
-            if (utils::BluetoothAddressCompare(&(*it)->Address(), address)) {
+            if (utils::BluetoothAddressCompare((*it)->Address(), address)) {
                 g_controllers.erase(it);
                 return;
             }
         }
     }
 
-    std::shared_ptr<SwitchController> LocateHandler(const bluetooth::Address *address) {
+    std::shared_ptr<SwitchController> LocateHandler(bluetooth::Address address) {
         std::scoped_lock lk(g_controller_lock);
 
         for (auto it = g_controllers.begin(); it < g_controllers.end(); ++it) {
-            if (utils::BluetoothAddressCompare(&(*it)->Address(), address)) {
+            if (utils::BluetoothAddressCompare((*it)->Address(), address)) {
                 return (*it);
             }
         }

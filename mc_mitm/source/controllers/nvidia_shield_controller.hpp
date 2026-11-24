@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,18 +18,6 @@
 
 namespace ams::controller {
 
-    enum NvidiaShieldDPadDirection {
-        NvidiaShieldDPad_N,
-        NvidiaShieldDPad_NE,
-        NvidiaShieldDPad_E,
-        NvidiaShieldDPad_SE,
-        NvidiaShieldDPad_S,
-        NvidiaShieldDPad_SW,
-        NvidiaShieldDPad_W,
-        NvidiaShieldDPad_NW,
-        NvidiaShieldDPad_Released = 0x80
-    };
-
     struct NvidiaShieldButtonData {
         u8 A     : 1;
         u8 B     : 1;
@@ -46,10 +34,10 @@ namespace ams::controller {
 
     struct NvidiaShieldInputReport0x01 {
         u8 _unk0;  // maybe a counter?
-        u8 dpad;
+        DirectionalPadType<0, 0x80> dpad;
         NvidiaShieldButtonData buttons;
-        u16 left_trigger;
-        u16 right_trigger;
+        AnalogTriggerType<u16> left_trigger;
+        AnalogTriggerType<u16> right_trigger;
         AnalogStick<u16> left_stick;
         AnalogStick<u16> right_stick;
         u8 home : 1;
@@ -76,10 +64,9 @@ namespace ams::controller {
                 {0x0955, 0x7214}    // Nvidia Shield Controller (2017) v1.04
             };
 
-            NvidiaShieldController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            NvidiaShieldController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const NvidiaShieldReportData *src);

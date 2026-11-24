@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,18 +18,6 @@
 
 namespace ams::controller {
 
-    enum XboxOneDPadDirection {
-        XboxOneDPad_Released,
-        XboxOneDPad_N,
-        XboxOneDPad_NE,
-        XboxOneDPad_E,
-        XboxOneDPad_SE,
-        XboxOneDPad_S,
-        XboxOneDPad_SW,
-        XboxOneDPad_W,
-        XboxOneDPad_NW
-    };
-
     enum XboxOnePowerMode {
         XboxOnePowerMode_USB         = 0,
         XboxOnePowerMode_Battery     = 1,
@@ -38,8 +26,6 @@ namespace ams::controller {
 
     // Used on older firmware
     struct XboxOneButtonDataOld {
-        u8      dpad;
-
         u8 A            : 1;
         u8 B            : 1;
         u8 X            : 1;
@@ -56,8 +42,6 @@ namespace ams::controller {
 
     // Used on latest firmwares
     struct XboxOneButtonData {
-        u8      dpad;
-
         u8 A            : 1;
         u8 B            : 1;
         u8              : 1;
@@ -92,8 +76,9 @@ namespace ams::controller {
     struct XboxOneInputReport0x01 {
         AnalogStick<u16> left_stick;
         AnalogStick<u16> right_stick;
-        u16 left_trigger;
-        u16 right_trigger;
+        AnalogTriggerType<u16, 0x3FF> left_trigger;
+        AnalogTriggerType<u16, 0x3FF> right_trigger;
+        DirectionalPadType<1, 0> dpad;
         union {
             XboxOneButtonData buttons;
 
@@ -137,11 +122,10 @@ namespace ams::controller {
                 {0x045e, 0x0b0a}    // Official Xbox Adaptive Controller
             };
 
-            XboxOneController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            XboxOneController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            Result SetVibration(const SwitchMotorData *motor_data);
-            void ProcessInputData(const bluetooth::HidReport *report) override;
+            virtual Result SetVibration(const SwitchMotorData *motor_data) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
         private:
             void MapInputReport0x01(const XboxOneReportData *src, bool new_format);

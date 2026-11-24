@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -79,10 +79,10 @@ namespace ams::bluetooth::hid {
     inline void HandleConnectionStateEventV1(bluetooth::HidEventInfo *event_info) {
         switch (event_info->connection.v1.status) {
             case BtdrvHidConnectionStatusOld_Opened:
-                controller::AttachHandler(&event_info->connection.v1.addr);
+                controller::AttachHandler(event_info->connection.v1.addr);
                 break;
             case BtdrvHidConnectionStatusOld_Closed:
-                controller::RemoveHandler(&event_info->connection.v1.addr);
+                controller::RemoveHandler(event_info->connection.v1.addr);
                 break;
             default:
                 break;
@@ -92,10 +92,10 @@ namespace ams::bluetooth::hid {
     inline void HandleConnectionStateEventV12(bluetooth::HidEventInfo *event_info) {
         switch (event_info->connection.v12.status) {
             case BtdrvHidConnectionStatus_Opened:
-                controller::AttachHandler(&event_info->connection.v12.addr);
+                controller::AttachHandler(event_info->connection.v12.addr);
                 break;
             case BtdrvHidConnectionStatus_Closed:
-                controller::RemoveHandler(&event_info->connection.v12.addr);
+                controller::RemoveHandler(event_info->connection.v12.addr);
                 break;
             default:
                 break;

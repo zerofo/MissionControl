@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -36,11 +36,9 @@ namespace ams::controller {
                 {0x15e4, 0x0132}    // ION iCade Controller
             };
 
-            ICadeController(const bluetooth::Address *address, HardwareID id)
-            : EmulatedSwitchController(address, id) { }
+            ICadeController(bluetooth::Address address, HardwareID id) : EmulatedSwitchController(address, id) { }
 
-            void ProcessInputData(const bluetooth::HidReport *report) override;
-            void ApplyButtonCombos(SwitchButtonData *buttons) override;
+            virtual void ParseInputReport(const u8 *report_buffer, size_t size) override;
 
     };
 

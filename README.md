@@ -54,6 +54,7 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 * __Steelseries Stratus XL__
 * __GameSir G3s__
 * __GameSir G4s__
+* __GameSir G7 Pro__
 * __GameSir T1s__
 * __GameSir T2a__
 * __Hori Onyx__
@@ -63,8 +64,9 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 * __PowerA Moga Hero__
 * __PowerA Moga Pro__
 * __PowerA Moga Pro 2__
-* __Mad-Catz C.T.R.L.R__
-* __Mad-Catz L.Y.N.X 3__
+* __Mad Catz C.T.R.L. R__
+* __Mad Catz Micro C.T.R.L. R__
+* __Mad Catz L.Y.N.X 3__
 * __Razer Raiju Tournament__
 * __Razer Raiju Ultimate__
 * __Razer Serval__
@@ -76,6 +78,7 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 * __Betop 2585N2__
 * __Atari Wireless Modern Controller__
 * __SCUF Vantage 2__
+* __Amazon Fire TV Game Controller__
 
 **Not all Xbox One wireless controllers support Bluetooth. Older variants use a proprietary 2.4Ghz protocol and cannot be used with the Switch. See [here](https://support.xbox.com/help/hardware-network/accessories/connect-and-troubleshoot-xbox-one-bluetooth-issues) for information on identifying the Bluetooth variant.*
 
@@ -89,7 +92,7 @@ Use controllers from other consoles natively on your Nintendo Switch via Bluetoo
 Download the [latest release](https://github.com/ndeadly/MissionControl/releases) .zip and extract to the root of your SD card, allowing the folders to merge and overwriting any existing files. Reboot your console to activate the module and you're done!
 
 ***IMPORTANT: 
-Atmosphère >= 1.9.1 is required to run the latest release of Mission Control on firmware 20.1.0+. Using an older Atmosphère version will cause Mission Control to crash or freeze the system on boot.***
+Atmosphère >= 1.12.2 is required to run the latest release of Mission Control on firmware 23.5.0+. Using an older Atmosphère version will cause Mission Control to crash or freeze the system on boot.***
 
 ### Usage
 
@@ -125,6 +128,13 @@ If you have difficulty getting the controller to pair to the console, press and 
 Press and hold the `guide`(`X`) button until the LED starts blinking. Then press and hold the small sync button on the back near the charging port until the LED starts blinking more rapidly.
 
 *Note: controller firmware versions 5.xx.xxxx.x and upward use Bluetooth Low Energy and are not currently supported. Please refer to the [FAQ](#frequently-asked-questions) for instructions on downgrading to a compatible firmware*
+
+***Mad Catz C.T.R.L. R and Micro C.T.R.L. R controllers***
+Press and hold the `Emblem` (`⊜`) button to turn the controller on. Then press and hold the `Rewind` + `Fast Forward` (`⏪` + `⏩`) media buttons on the controller for three seconds until the `Emblem` flashes magenta once. This clears the Bluetooth pairing. The `Emblem` will cycle red/blue while the controller is in pairing mode. The `Emblem` will change to deep solid blue when pairing is successful (pair on the Change Grip/Order screen).
+
+The `Volume down` (`🔈`) button on the controller is mapped to `Capture`, and `Volume up` (`🔊`) is mapped to `Home`.
+
+Ensure the mode slider on the underside of the controller is set to the far right (`Desktop` (`💻`) icon) position, otherwise the button and trigger assignments will be wrong.
 
 ***Other Controllers***
 Please refer to your controller's user manual for information on how to put it into sync mode. Note that many generic Bluetooth controllers can be started in one of several modes. Usually you want to choose something like HID, PC or Android mode for it to work correctly.

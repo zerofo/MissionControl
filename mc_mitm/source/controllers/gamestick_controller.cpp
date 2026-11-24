@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2025 ndeadly
+ * Copyright (c) 2020-2026 ndeadly
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -18,62 +18,65 @@
 
 namespace ams::controller {
 
-    void GamestickController::ProcessInputData(const bluetooth::HidReport *report) {
-        auto gamestick_report = reinterpret_cast<const GamestickReportData *>(&report->data);
+    void GamestickController::ParseInputReport(const u8 *report_buffer, size_t size) {
+        AMS_UNUSED(size);
+        auto report = reinterpret_cast<const GamestickReportData *>(report_buffer);
 
-        switch(gamestick_report->id) {
+        switch(report->id) {
             case 0x01:
-                this->MapInputReport0x01(gamestick_report); break;
+                this->MapInputReport0x01(report); break;
             case 0x03:
-                this->MapInputReport0x03(gamestick_report); break;
+                this->MapInputReport0x03(report); break;
             default:
                 break;
         }
     }
 
     void GamestickController::MapInputReport0x01(const GamestickReportData *src) {
-        m_buttons.minus = src->input0x01.buttons.back;
-        m_buttons.home = src->input0x01.buttons.home;
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Minus, src->input0x01.buttons.back);
+        button_state.Assign(SwitchButton::Home,  src->input0x01.buttons.home);
+        m_buttons = button_state;
     }
 
     void GamestickController::MapInputReport0x03(const GamestickReportData *src) {
-        m_left_stick  = PackAnalogStickValues(src->input0x03.left_stick.x,  InvertAnalogStickValue(src->input0x03.left_stick.y));
-        m_right_stick = PackAnalogStickValues(src->input0x03.right_stick.x, InvertAnalogStickValue(src->input0x03.right_stick.y));
-        
-        m_buttons.dpad_down  = (src->input0x03.dpad == GamestickDPad_S)  ||
-                               (src->input0x03.dpad == GamestickDPad_SE) ||
-                               (src->input0x03.dpad == GamestickDPad_SW);
-        m_buttons.dpad_up    = (src->input0x03.dpad == GamestickDPad_N)  ||
-                               (src->input0x03.dpad == GamestickDPad_NE) ||
-                               (src->input0x03.dpad == GamestickDPad_NW);
-        m_buttons.dpad_right = (src->input0x03.dpad == GamestickDPad_E)  ||
-                               (src->input0x03.dpad == GamestickDPad_NE) ||
-                               (src->input0x03.dpad == GamestickDPad_SE);
-        m_buttons.dpad_left  = (src->input0x03.dpad == GamestickDPad_W)  ||
-                               (src->input0x03.dpad == GamestickDPad_NW) ||
-                               (src->input0x03.dpad == GamestickDPad_SW);
-        
-        m_buttons.A = src->input0x03.buttons.B;
-        m_buttons.B = src->input0x03.buttons.A;
-        m_buttons.X = src->input0x03.buttons.Y;
-        m_buttons.Y = src->input0x03.buttons.X;
+        auto dpad = DirectionalPad(src->input0x03.dpad);
 
-        m_buttons.L = src->input0x03.buttons.L;
-        m_buttons.R = src->input0x03.buttons.R;
+        m_left_stick.SetValuesFrom(
+            src->input0x03.left_stick.GetX(),
+            src->input0x03.left_stick.GetYInverted()
+        );
 
-        // Combos for ZL/ZR
-        if (m_buttons.dpad_down) {
-            m_buttons.ZL = src->input0x03.buttons.L;
-            m_buttons.ZR = src->input0x03.buttons.R;
-            m_buttons.dpad_down = !(m_buttons.ZL || m_buttons.ZR);
-            m_buttons.L = !m_buttons.ZL;
-            m_buttons.R = !m_buttons.ZR;
+        m_right_stick.SetValuesFrom(
+            src->input0x03.right_stick.GetX(),
+            src->input0x03.right_stick.GetYInverted()
+        );
+
+        SwitchButtons button_state = m_buttons;
+        button_state.Assign(SwitchButton::Down,   dpad.IsDown());
+        button_state.Assign(SwitchButton::Up,     dpad.IsUp());
+        button_state.Assign(SwitchButton::Right,  dpad.IsRight());
+        button_state.Assign(SwitchButton::Left,   dpad.IsLeft());
+        button_state.Assign(SwitchButton::A,      src->input0x03.buttons.B);
+        button_state.Assign(SwitchButton::B,      src->input0x03.buttons.A);
+        button_state.Assign(SwitchButton::X,      src->input0x03.buttons.Y);
+        button_state.Assign(SwitchButton::Y,      src->input0x03.buttons.X);
+        button_state.Assign(SwitchButton::L,      src->input0x03.buttons.L);
+        button_state.Assign(SwitchButton::R,      src->input0x03.buttons.R);
+        button_state.Assign(SwitchButton::Plus,   src->input0x03.buttons.start);
+        button_state.Assign(SwitchButton::StickL, src->input0x03.buttons.lstick_press);
+        button_state.Assign(SwitchButton::StickR, src->input0x03.buttons.rstick_press);
+
+        if (button_state.Test(SwitchButton::Down)) {
+            button_state.Assign(SwitchButton::ZL,   src->input0x03.buttons.L);
+            button_state.Assign(SwitchButton::ZR,   src->input0x03.buttons.R);
+
+            button_state.Assign(SwitchButton::Down, !button_state.Any(SwitchButton::ZL | SwitchButton::ZR));
+            button_state.Assign(SwitchButton::L,    !button_state.Test(SwitchButton::ZL));
+            button_state.Assign(SwitchButton::R,    !button_state.Test(SwitchButton::ZR));
         }
 
-        m_buttons.plus = src->input0x03.buttons.start;
-
-        m_buttons.lstick_press = src->input0x03.buttons.lstick_press;
-        m_buttons.rstick_press = src->input0x03.buttons.rstick_press;
+        m_buttons = button_state;
     }
 
 }
