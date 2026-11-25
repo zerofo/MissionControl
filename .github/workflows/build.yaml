@@ -21,7 +21,9 @@ jobs:
     - name: Build project
       run: |
           git config --global --add safe.directory '*' && \
-          git submodule update --init --remote && make dist -j2
+          git submodule update --init lib/Atmosphere-libs lib/libnx && \
+          make -C lib/libnx/nx install -j$(nproc) && \
+          make dist -j2
           ls ./dist/MissionControl--*-*.zip|xargs -I {} mv {} ./dist/MissionControl.zip
           
     - name: Upload artifacts
