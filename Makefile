@@ -5,7 +5,7 @@ GIT_BRANCH := $(shell git symbolic-ref --short HEAD | sed s/[^a-zA-Z0-9_-]/_/g)
 GIT_HASH := $(shell git rev-parse --short HEAD)
 GIT_TAG := $(shell git describe --tags `git rev-list --tags --max-count=1`)
 
-VERSION := $(shell printf "0x%02X%02X%02X" $(shell echo "$(GIT_TAG)" | sed -E 's/^v([0-9]+).([0-9]+).([0-9]+)/\1 \2 \3/g'))
+VERSION := $(shell echo "$(GIT_TAG)" | sed -E 's/^v([0-9]+).([0-9]+).([0-9]+)/\1 \2 \3/g' | awk '{ if ($$1 ~ /^[0-9]+$$/ && $$2 ~ /^[0-9]+$$/) printf "0x%02X%02X%02X", $$1, $$2, $$3; else print "0x000000" }')
 BUILD_VERSION := $(GIT_TAG:v%=%)-$(GIT_BRANCH)-$(GIT_HASH)
 BUILD_DATE := $(shell date)
 
