@@ -11,6 +11,12 @@ BUILD_DATE := $(shell date)
 
 TARGETS := mcmitm_version.cpp mc_mitm
 
+
+# vgedit-style fix: repair PIE link breakage under devkitA64 gcc 15 (idempotent)
+all: | fix_pie
+.PHONY: fix_pie
+fix_pie:
+	python3 $(CURDIR)/fix_pie.py
 all: $(TARGETS)
 
 mcmitm_version.cpp: .git/HEAD .git/index

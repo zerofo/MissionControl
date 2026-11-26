@@ -5,6 +5,13 @@ THIS_MAKEFILE := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_DIRECTORY := $(abspath $(dir $(THIS_MAKEFILE)))
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/../lib/Atmosphere-libs/config/templates/stratosphere.mk
 
+# gcc 15 devkitA64 PIE breakage: drop -fPIE without touching the Atmosphere-libs submodule.
+ATMOSPHERE_SETTINGS := $(subst -fPIE,,$(ATMOSPHERE_SETTINGS))
+SETTINGS = $(ATMOSPHERE_SETTINGS) $(ATMOSPHERE_OPTIMIZATION_FLAG) -Wextra -Werror -Wno-missing-field-initializers -Wno-error=unused-result
+CFLAGS = $(ATMOSPHERE_CFLAGS) $(SETTINGS) $(DEFINES) $(INCLUDE)
+CXXFLAGS = $(CFLAGS) $(ATMOSPHERE_CXXFLAGS)
+ASFLAGS = $(ATMOSPHERE_ASFLAGS) $(SETTINGS) $(DEFINES)
+
 ATMOSPHERE_SYSTEM_MODULE_TARGETS := nsp
 
 #---------------------------------------------------------------------------------
